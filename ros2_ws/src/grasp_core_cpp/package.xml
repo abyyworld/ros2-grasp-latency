@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>grasp_core_cpp</name>
+  <version>0.1.0</version>
+  <description>
+    ament shim that re-exports the ROS-independent grasp_core library (built
+    from cpp/ with plain CMake and installed to CMAKE_PREFIX_PATH) as an ament
+    package. No sources; see docker/Dockerfile for how grasp_core is installed.
+  </description>
+  <maintainer email="kenny09077@gmail.com">ros2-grasp-latency</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- grasp_core is not a ROS package, so it cannot be declared here; it is
+       resolved through CMAKE_PREFIX_PATH by find_package(grasp_core). -->
+  <depend>eigen</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
