@@ -15,12 +15,12 @@ back to back in one measurement window, milliseconds:
 
 | implementation | p50 | p95 | p99 |
 | :--- | ---: | ---: | ---: |
-| C++, Eigen 3.4, `-O2 -DNDEBUG` | 58.3 | 62.8 | 64.9 |
-| Python, NumPy 2.4 and SciPy 1.17 | 93.8 | 102.5 | 109.7 |
-| Python, `OPENBLAS_NUM_THREADS=1` | 92.6 | 100.3 | 106.6 |
+| C++, Eigen 3.4, `-O2 -DNDEBUG` | 56.6 | 60.0 | 61.9 |
+| Python, NumPy 2.4 and SciPy 1.17 | 87.9 | 95.6 | 103.3 |
+| Python, `OPENBLAS_NUM_THREADS=1` | 87.6 | 94.3 | 102.0 |
 
-Python costs **1.61x at p50 and 1.69x at p99**. Pinned to one BLAS thread it
-costs 1.59x and 1.64x, and it is slightly *faster* than the four-thread run:
+Python costs **1.55x at p50 and 1.67x at p99**. Pinned to one BLAS thread it
+costs 1.55x and 1.65x, and it is slightly *faster* than the four-thread run:
 NumPy's BLAS spends about four cores here to deliver nothing, because the
 matrices in this pipeline are too small for the threads to beat their own
 synchronisation. On a robot controller sharing four cores with a planner and a
