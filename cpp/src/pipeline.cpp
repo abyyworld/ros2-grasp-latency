@@ -224,18 +224,16 @@ const Result & Pipeline::run(
   if (n_cluster > 0) {
     const int * idx = s.cluster_indices.data();
     const double inv_count = 1.0 / static_cast<double>(n_cluster);
-    double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
+    double sum_x = 0.0, sum_y = 0.0;
     double z_top = -std::numeric_limits<double>::infinity();
     for (int i = 0; i < n_cluster; ++i) {
       const float * p = object + 3 * idx[i];
       sum_x += static_cast<double>(p[0]);
       sum_y += static_cast<double>(p[1]);
-      sum_z += static_cast<double>(p[2]);
       z_top = std::max(z_top, static_cast<double>(p[2]));
     }
     const double centre_x = sum_x * inv_count;
     const double centre_y = sum_y * inv_count;
-    const double centre_z = sum_z * inv_count;
 
     double sxx = 0.0, sxy = 0.0, syy = 0.0;
     for (int i = 0; i < n_cluster; ++i) {

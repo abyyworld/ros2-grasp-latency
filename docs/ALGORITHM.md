@@ -160,6 +160,29 @@ set matches.
    ```
    z_tcp = approach_axis_base           # (0, 0, -1), straight down
    y_tcp = normalise((a2_x, a2_y, 0))   # fingers close along this
+   ```
+
+   **Resolve the closing-axis sign against the wrist, not against the
+   eigenvector.** A parallel-jaw gripper is symmetric about its closing axis:
+   closing along `+y` and along `-y` are the same physical grasp. Rule 3's
+   canonicalisation picks a sign from the eigenvector's components, which knows
+   nothing about the arm, and that confines the demanded yaw to two quadrants
+   and can ask joint 7 for up to 180 degrees of travel from `q_neutral`. Joint
+   7 only has 2.182 rad of headroom upward, so those grasps are orientation
+   unreachable and IK burns all `max_iterations` failing to reach them.
+
+   So fold the ambiguity toward the wrist's rest orientation:
+   ```
+   y_ref = horizontal component of the TCP y axis at q_neutral, normalised
+           # computed once at construction, never in the measured path
+   if dot(y_tcp, y_ref) < 0:      y_tcp = -y_tcp
+   elif dot(y_tcp, y_ref) == 0:   flip so y_tcp_x > 0, or if y_tcp_x == 0, y_tcp_y > 0
+   ```
+   This caps the demanded wrist rotation at 90 degrees while naming the
+   identical grasp. It is a change to which of two equivalent frames is
+   reported, not to which object is grasped or where.
+
+   ```
    x_tcp = cross(y_tcp, z_tcp)
    ```
    `det([x y z])` must be `+1` to within `1e-9`.

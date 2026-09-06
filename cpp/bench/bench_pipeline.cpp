@@ -3,9 +3,9 @@
 // between the two allocates, formats a string or touches a file: the point of
 // the exercise is to time the pipeline, not the harness around it.
 //
-//   bench_pipeline --dataset data/table_640x480 \
-//                  --out-timing results/cpp.timing.jsonl \
-//                  --out-output results/cpp.output.jsonl \
+//   bench_pipeline --dataset data/table_640x480
+//                  --out-timing results/cpp.timing.jsonl
+//                  --out-output results/cpp.output.jsonl
 //                  --warmup 100 --frames 2000
 
 #include <array>
