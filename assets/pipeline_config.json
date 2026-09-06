@@ -141,7 +141,7 @@
   },
 
   "implementation": {
-    "_comment": "Blocking parameters. These change how the work is issued, never what it computes: any value gives bit-identical output, only the memory traffic differs. Chosen by measurement on the machine in docs/TOOLCHAIN.md.",
+    "_comment": "Blocking parameters. These change how the work is issued, never what it computes: any value gives bit-identical output, only the memory traffic differs. Chosen by measurement on the machine in docs/TOOLCHAIN.md. This held only after the int16 inlier accumulator in the Python plane stage was widened to int32; before that, a block above 32767 points wrapped and changed which plane RANSAC chose.",
     "ransac_block_points": 512,
     "ransac_block_note": "Points scored against all candidate planes at a time. 512 x 128 float64 is 512 KiB, which keeps the distance block inside L2."
   },

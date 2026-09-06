@@ -53,7 +53,7 @@ class PlaneRemover:
         self._hit_flat = np.empty(block_points * k, dtype=np.bool_)
         self._plane_flat = np.empty(4 * k, dtype=np.float64)
         self._counts = np.empty(k, dtype=np.int64)
-        self._partial = np.empty(k, dtype=np.int16)
+        self._partial = np.empty(k, dtype=np.int32)
         self._normals = np.empty((k, 3), dtype=np.float64)
         self._offsets = np.empty(k, dtype=np.float64)
         self._valid = np.empty(k, dtype=np.bool_)
@@ -137,10 +137,13 @@ class PlaneRemover:
             np.matmul(homogeneous[start:stop], model, out=chunk)
             np.abs(chunk, out=chunk)
             np.less(chunk, threshold, out=inside)
-            # A bool view summed as int16 is three times cheaper than the
-            # int64 reduction numpy picks by default, and a block cannot
-            # overflow it.
-            np.add.reduce(inside.view(np.uint8), axis=0, dtype=np.int16,
+            # A bool view summed in a narrow integer type is markedly cheaper
+            # than the int64 reduction numpy picks by default. int32, not
+            # int16: the sum reaches the block's row count, so int16 wraps
+            # silently for any ransac_block_points above 32767 and RANSAC then
+            # picks a different candidate. That is not hypothetical, it was
+            # caught by the equivalence gate at a 131072-point block.
+            np.add.reduce(inside.view(np.uint8), axis=0, dtype=np.int32,
                           out=partial)
             np.add(counts, partial, out=counts)
 
