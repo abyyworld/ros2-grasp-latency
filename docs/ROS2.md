@@ -72,14 +72,15 @@ at 20 waypoints.
 point of the whole exercise.
 
 ```
-              publish                                        callback
-              by driver                                        entry        publish
-  ────────────────┬───────────────────────────────────────────────┬────────────┬──────►
-                  │  DDS transport, CDR deserialisation,          │  pipeline  │
-                  │  executor dispatch, rclpy object conversion   │  + msg     │
-                  │                                               │  build     │
-  header.stamp ───┘                                               └── compute_ns ──┘
-                  └──────────────────── end_to_end_ns ─────────────────────────┘
+        driver                                     callback
+        publishes                                  entry              publish
+  ----------+------------------------------------------+-----------------+------->
+            |  DDS transport, CDR deserialisation,     |  pipeline       |
+            |  executor dispatch, rclpy conversion     |  + msg build    |
+            |                                          |                 |
+  header.stamp                                         |<- compute_ns ->|
+            |                                                            |
+            |<--------------------- end_to_end_ns --------------------->|
 ```
 
 * `compute_ns`: monotonic clock, from subscription-callback entry (before any
