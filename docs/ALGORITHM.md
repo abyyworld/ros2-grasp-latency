@@ -176,7 +176,10 @@ set matches.
    direction, the one the fingers close along.
 3. `width` = extent of the cluster projected onto `a2`
    (`max - min`) plus `finger_clearance_m`.
-   If `width > max_width_m`, return `graspable = false`.
+   `graspable = width <= max_width_m`. A frame that fails this test does not
+   stop here: steps 4 and 5 still run and still produce a pose, because S6
+   runs on it. `graspable` is a verdict about the gripper, not a branch in the
+   pipeline.
 4. Build a right-handed TCP frame:
    ```
    z_tcp = approach_axis_base           # (0, 0, -1), straight down
@@ -216,10 +219,39 @@ set matches.
    p_tcp    = (c_x, c_y, z_grasp)
    ```
 
+**When S4 returned no cluster.** There is nothing to synthesise, and the
+frame's answer is not the previous frame's pose left in a reused buffer:
+
+```
+graspable   = false
+width       = 0
+T_base_tcp  = all sixteen entries zero
+```
+
+S6 and S7 then report the empty answer given under each of them. This is the
+only case in which the pipeline stops before S7.
+
 ## S6. Inverse kinematics
 
 **In:** `T_base_tcp`, the chain from `assets/franka/panda_chain.json`.
 **Out:** `q` (7), `converged`, `iterations`.
+
+**S6 and S7 run on every frame that reached S5 with a cluster**, whatever
+`graspable` says. A cluster too wide for the jaws still has a pose, and the
+solver can be asked for it. Gating the solver on the width test instead would
+make the length of the pipeline a property of the object's width, so the
+latency distribution would carry a term that has nothing to do with the
+language being measured, and two implementations that disagreed about the gate
+would be timing different pipelines while passing an equivalence check that
+never looks past the bail-out.
+
+When S4 returned no cluster there is no pose to solve for, and S6 answers:
+
+```
+q          = q_neutral
+converged  = false
+iterations = 0
+```
 
 Damped least squares with a null-space pull toward `q_neutral`. Seeded from
 `q_neutral` **every frame**, not from the previous solution, so per-frame cost
@@ -245,11 +277,12 @@ for it in [0, max_iterations):
 `nullspace_gain * (I - J^T (J J^T + damping^2 I)^-1 J) @ (q_neutral - q)` to
 bias the redundant seventh degree of freedom toward the neutral posture. That
 matrix is not a null-space projector while `damping > 0`, so the bias leaked
-into task space and the solver stalled at a fixed point outside tolerance: **0
-of 100 real grasp targets converged**, worst position error 2.79 mm against a
-0.5 mm tolerance. The failure is in position, not orientation: worst
-orientation error is 1.60 mrad, comfortably inside the 5 mrad tolerance. A true
-pseudo-inverse projector does converge, but costs an SVD per iteration.
+into task space and the solver stalled at a fixed point outside tolerance: at
+gain 0.1 and the configured damping 0.05, **0 of 100 real grasp targets
+converged**, worst position error 2.87 mm against a 0.5 mm tolerance. The
+failure is in position, not orientation: worst orientation error is 1.45 mrad,
+inside the 5 mrad tolerance. A true pseudo-inverse projector does converge, but
+costs an SVD per iteration.
 
 (An earlier revision of this file attributed the failure to a 198 mrad
 orientation error. That figure came from a sweep run before the S5 wrist fold
@@ -258,7 +291,13 @@ reproduce against the shipped pipeline. The 0 of 100 result does reproduce.) Sin
 sits near the neutral posture, so the term earned nothing and
 `nullspace_gain` defaults to `0`. With it off and the S5 wrist fold in place,
 **100 of 100 targets converge in a median of 9 iterations**, worst-case
-position error 0.495 mm. [METHOD.md](METHOD.md) has the sweep.
+position error 0.4944 mm.
+
+Every figure in these two paragraphs is read out of
+[`results/nullspace_sweep.json`](../results/nullspace_sweep.json), the cell at
+`damping` 0.05, rather than from a sweep run once by hand and quoted from
+memory. `tools/fill_method_placeholders.py --measure-nullspace` regenerates
+that file; [METHOD.md](METHOD.md) section 11 lays the whole grid out.
 
 FK uses Rodrigues' formula on each joint's axis; every Panda arm joint is
 revolute about its child frame's z, but nothing may assume that.
@@ -283,6 +322,11 @@ for k in [0, waypoints):
     acceleration[k] =           hdd * (q_goal - q_start)
     time[k]         = s * duration
 ```
+
+S7 runs on the same condition as S6, so a frame that was not graspable is
+still planned for: `q` came from the solver either way. When S4 returned no
+cluster, `duration = 0` and every waypoint's position, velocity, acceleration
+and `time_from_start` are zero.
 
 ---
 

@@ -110,6 +110,10 @@ class GraspPipeline:
         self._grasp.set_wrist_reference(self._ik.forward(chain.q_neutral)[:3, 1])
 
         self._shape = None
+        # What the TCP field reads on a frame that produced no cluster. A
+        # separate buffer, because the live one holds the last pose S5 built
+        # and that pose is not this frame's answer.
+        self._no_pose = np.zeros((4, 4), dtype=np.float64)
         result = GraspResult()
         result.plane = self._plane.plane
         result.tcp = self._grasp.tcp
@@ -186,7 +190,8 @@ class GraspPipeline:
         indices = self._clusterer.run(points_object)
         mark5 = clock()
 
-        if indices.size > 0:
+        clustered = indices.size > 0
+        if clustered:
             graspable = self._grasp.run(points_object, indices,
                                         self._plane.plane, plane_found)
             grasp_width = self._grasp.width
@@ -195,7 +200,12 @@ class GraspPipeline:
             grasp_width = 0.0
         mark6 = clock()
 
-        if graspable:
+        # ALGORITHM.md S6: the solver runs on every frame that has a pose, so
+        # the gate is the cluster and not `graspable`. `graspable` is the
+        # gripper-width verdict, and gating here on it would make how much of
+        # the pipeline a frame runs, and so the latency this file exists to
+        # measure, a function of how wide the object happened to be.
+        if clustered:
             converged = self._ik.solve(self._grasp.tcp)
             iterations = self._ik.iterations
         else:
@@ -204,7 +214,7 @@ class GraspPipeline:
             np.copyto(self._ik.q, self.chain.q_neutral)
         mark7 = clock()
 
-        if graspable:
+        if clustered:
             duration = self._planner.run(self.chain.q_neutral, self._ik.q)
         else:
             duration = 0.0
@@ -227,6 +237,12 @@ class GraspPipeline:
         result.points = points_base.shape[0]
         result.cluster_points = int(indices.size)
         result.plane_found = plane_found
+        # A frame with no cluster has no pose, and the buffer still holds the
+        # last one S5 built. Swap in zeros, which is what
+        # cpp/src/pipeline.cpp reports there. Rebinding the attribute out here
+        # costs nothing measured; clearing the live buffer would put a store
+        # inside S5 on every frame instead.
+        result.tcp = self._grasp.tcp if clustered else self._no_pose
         result.graspable = graspable
         result.width = grasp_width
         result.converged = converged

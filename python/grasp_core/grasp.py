@@ -5,6 +5,11 @@ getting the spec's tie-breaks right: the minor axis is the smaller eigenvalue
 of the 2-D covariance, its sign comes from determinism rule 3 rather than from
 whichever sign LAPACK happened to return, and the grasp height is clamped
 against the refit plane rather than against z = 0.
+
+There is no early exit on the width test. A cluster the jaws cannot span still
+gets a complete pose, because S6 runs on every frame that has a cluster and
+would otherwise be handed the previous frame's answer. `run` reports the width
+verdict; it does not act on it.
 """
 from __future__ import annotations
 
@@ -70,8 +75,6 @@ class GraspSynthesiser:
         np.matmul(cluster[:, :2], minor, out=projected)
         width = float(projected.max() - projected.min()) + self._clearance
         self.width = width
-        if width > self._max_width:
-            return False
 
         tcp = self.tcp
         # y closes the fingers along the narrow direction, z is the approach,
@@ -114,4 +117,7 @@ class GraspSynthesiser:
         tcp[0, 3] = centroid[0]
         tcp[1, 3] = centroid[1]
         tcp[2, 3] = z_grasp
-        return True
+        # ALGORITHM.md S5: the width test decides whether the gripper can span
+        # this object, and nothing else. It does not decide how far down the
+        # pipeline the frame gets, so it is reported here and read in S6.
+        return width <= self._max_width

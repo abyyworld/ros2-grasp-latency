@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import gc
-import hashlib
 import json
 import os
 import platform
@@ -41,7 +40,6 @@ from grasp_core import (STAGE_KEYS, GraspPipeline,  # noqa: E402
                         calibrate_timer_ns)
 
 SIGNIFICANT = '.17g'
-CHECKSUM_DECIMALS = 9
 PERCENTILES = (50.0, 95.0, 99.0)
 # Percentiles are reported at the nearest observed sample rather than
 # interpolated between two: a latency that was never measured is not a latency.
@@ -103,42 +101,75 @@ class CollectionCounter:
         gc.callbacks.remove(self._on_collect)
 
 
-def trajectory_checksum(result) -> str:
-    """SHA-256 over the waypoint block, exactly as docs/FORMATS.md defines it.
+class OutputStore:
+    """One equivalence record per distinct frame, in preallocated arrays.
 
-    Positions, then velocities, then accelerations, then time, waypoint by
-    waypoint, each an IEEE-754 double rounded to nine decimals first, because
-    the two implementations only agree to 1e-6.
+    The C++ runner fills a vector of records inside the loop and turns it into
+    text afterwards, and this does the same for the same reason: formatting the
+    waypoint block between two measured frames would put a string builder and
+    several kilobytes of garbage in the middle of the run, which is the very
+    thing the collection counters are here to measure.
     """
-    count = result.positions.shape[0]
-    block = np.empty((count, result.positions.shape[1] * 3 + 1),
-                     dtype=np.float64)
-    dof = result.positions.shape[1]
-    block[:, :dof] = result.positions
-    block[:, dof:2 * dof] = result.velocities
-    block[:, 2 * dof:3 * dof] = result.accelerations
-    block[:, 3 * dof] = result.times
-    np.round(block, CHECKSUM_DECIMALS, out=block)
-    # -0.0 and +0.0 compare equal and hash differently, so fold the sign the
-    # way cpp/bench/bench_pipeline.cpp does. Adding zero is exact for every
-    # other value and turns -0.0 into +0.0 by the IEEE-754 addition rule.
-    np.add(block, 0.0, out=block)
-    return hashlib.sha256(block.tobytes()).hexdigest()
+
+    __slots__ = ('dof', 'seen', 'plane', 'tcp', 'q', 'trajectory', 'width',
+                 'duration_s', 'counts', 'flags')
+
+    def __init__(self, frames: int, waypoints: int, dof: int):
+        self.dof = dof
+        self.seen = np.zeros(frames, dtype=np.bool_)
+        self.plane = np.zeros((frames, 4), dtype=np.float64)
+        self.tcp = np.zeros((frames, 16), dtype=np.float64)
+        self.q = np.zeros((frames, dof), dtype=np.float64)
+        # docs/FORMATS.md orders the block by waypoint: positions, then
+        # velocities, then accelerations, then time_from_start.
+        self.trajectory = np.zeros((frames, waypoints, 3 * dof + 1),
+                                   dtype=np.float64)
+        self.width = np.zeros(frames, dtype=np.float64)
+        self.duration_s = np.zeros(frames, dtype=np.float64)
+        self.counts = np.zeros((frames, 2), dtype=np.int64)
+        self.flags = np.zeros((frames, 3), dtype=np.bool_)
+
+    def record(self, frame: int, result) -> None:
+        dof = self.dof
+        self.seen[frame] = True
+        self.plane[frame] = result.plane
+        self.tcp[frame] = result.tcp.reshape(-1)
+        self.q[frame] = result.q
+        self.width[frame] = result.width
+        self.duration_s[frame] = result.duration_s
+        self.counts[frame, 0] = result.cluster_points
+        self.counts[frame, 1] = result.iterations
+        self.flags[frame, 0] = result.plane_found
+        self.flags[frame, 1] = result.graspable
+        self.flags[frame, 2] = result.converged
+        block = self.trajectory[frame]
+        block[:, :dof] = result.positions
+        block[:, dof:2 * dof] = result.velocities
+        block[:, 2 * dof:3 * dof] = result.accelerations
+        block[:, 3 * dof] = result.times
 
 
-def output_record(impl: str, frame: int, result) -> str:
+def output_record(impl: str, frame: int, store: OutputStore) -> str:
+    """One line of `*.output.jsonl`, per docs/FORMATS.md.
+
+    The whole waypoint block goes out rather than a digest of it: a digest is
+    an equality test, and two implementations that agree to a tolerance and not
+    to the bit can only be compared numerically. harness/compare_outputs.py
+    holds every value here to the same tolerance as the pose and the joints.
+    """
     return (
         '{"impl":"' + impl + '","frame":' + str(frame)
-        + ',"plane_found":' + flag(result.plane_found)
-        + ',"plane":' + vector(result.plane)
-        + ',"graspable":' + flag(result.graspable)
-        + ',"width":' + number(result.width)
-        + ',"tcp":' + vector(result.tcp.reshape(-1))
-        + ',"converged":' + flag(result.converged)
-        + ',"iterations":' + str(result.iterations)
-        + ',"q":' + vector(result.q)
-        + ',"duration_s":' + number(result.duration_s)
-        + ',"traj_checksum":"' + trajectory_checksum(result) + '"}')
+        + ',"plane_found":' + flag(store.flags[frame, 0])
+        + ',"plane":' + vector(store.plane[frame])
+        + ',"cluster_points":' + str(int(store.counts[frame, 0]))
+        + ',"graspable":' + flag(store.flags[frame, 1])
+        + ',"width":' + number(store.width[frame])
+        + ',"tcp":' + vector(store.tcp[frame])
+        + ',"converged":' + flag(store.flags[frame, 2])
+        + ',"iterations":' + str(int(store.counts[frame, 1]))
+        + ',"q":' + vector(store.q[frame])
+        + ',"duration_s":' + number(store.duration_s[frame])
+        + ',"trajectory":' + vector(store.trajectory[frame].reshape(-1)) + '}')
 
 
 def timing_record(impl: str, dataset: str, row, overhead_ns: int) -> str:

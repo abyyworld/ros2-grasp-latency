@@ -13,7 +13,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <fstream>
 #include <stdexcept>
 #include <iostream>
@@ -23,7 +22,6 @@
 #include "grasp_core/config.hpp"
 #include "grasp_core/json.hpp"
 #include "grasp_core/pipeline.hpp"
-#include "grasp_core/sha256.hpp"
 
 namespace
 {
@@ -165,6 +163,7 @@ struct OutputRecord
   bool seen{false};
   bool plane_found{false};
   std::array<double, 4> plane{};
+  int cluster_points{0};
   bool graspable{false};
   double width{0.0};
   std::array<double, 16> tcp{};
@@ -172,39 +171,10 @@ struct OutputRecord
   int iterations{0};
   std::array<double, grasp_core::kDof> q{};
   double duration_s{0.0};
-  std::vector<double> waypoint_block;   // waypoints * 22, as FORMATS.md orders them
+  // waypoints * (3 * kDof + 1), in the order docs/FORMATS.md fixes: one
+  // waypoint's positions, velocities, accelerations and time, then the next.
+  std::vector<double> waypoint_block;
 };
-
-// docs/FORMATS.md: values are rounded to 9 decimal places before hashing,
-// because the two implementations only agree to 1e-6 and an unrounded digest
-// would flag ULP-level summation differences as a divergence. nearbyint under
-// the default rounding mode is round-half-to-even, which is what NumPy's
-// around() does, so the two sides round identically. The negative-zero fold
-// matters because -0.0 and 0.0 hash differently while comparing equal.
-double round9(double v)
-{
-  double r = std::nearbyint(v * 1e9) / 1e9;
-  if (r == 0.0) {
-    r += 0.0;
-  }
-  return r;
-}
-
-std::string trajectory_checksum(const std::vector<double> & block)
-{
-  grasp_core::Sha256 hash;
-  for (const double v : block) {
-    const double rounded = round9(v);
-    std::uint64_t bits = 0;
-    std::memcpy(&bits, &rounded, sizeof(bits));
-    std::uint8_t bytes[8];
-    for (int i = 0; i < 8; ++i) {
-      bytes[i] = static_cast<std::uint8_t>((bits >> (8 * i)) & 0xffu);
-    }
-    hash.update(bytes, sizeof(bytes));
-  }
-  return hash.hex_digest();
-}
 
 // %.17g so a double survives a round trip through JSON unchanged.
 void append_double(std::string & out, double v)
@@ -298,6 +268,7 @@ int main(int argc, char ** argv)
         o.seen = true;
         o.plane_found = result.plane_found;
         o.plane = result.plane;
+        o.cluster_points = result.cluster_points;
         o.graspable = result.graspable;
         o.width = result.width;
         o.tcp = result.tcp;
@@ -374,6 +345,9 @@ int main(int argc, char ** argv)
     }
 
     text.clear();
+    // Roughly 24 characters per %.17g double, plus the fixed fields. One
+    // reserve rather than a dozen reallocations while the block is appended.
+    text.reserve(static_cast<std::size_t>(store.count) * (24u * (block_size + 32u)));
     for (int frame = 0; frame < store.count; ++frame) {
       const OutputRecord & o = outputs[static_cast<std::size_t>(frame)];
       if (!o.seen) {
@@ -385,6 +359,8 @@ int main(int argc, char ** argv)
       append_bool(text, o.plane_found);
       text += ",\"plane\":";
       append_doubles(text, o.plane.data(), o.plane.size());
+      text += ",\"cluster_points\":";
+      append_int(text, o.cluster_points);
       text += ",\"graspable\":";
       append_bool(text, o.graspable);
       text += ",\"width\":";
@@ -399,7 +375,9 @@ int main(int argc, char ** argv)
       append_doubles(text, o.q.data(), o.q.size());
       text += ",\"duration_s\":";
       append_double(text, o.duration_s);
-      text += ",\"traj_checksum\":\"" + trajectory_checksum(o.waypoint_block) + "\"}\n";
+      text += ",\"trajectory\":";
+      append_doubles(text, o.waypoint_block.data(), o.waypoint_block.size());
+      text += "}\n";
     }
     {
       std::ofstream out(opt.out_output, std::ios::binary);
