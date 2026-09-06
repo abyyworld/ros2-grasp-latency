@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+# Eigen is used only inside the library's translation units and never appears
+# in an installed header, but a static archive still records it as a link
+# requirement, so a consumer has to be able to resolve the imported target.
+include(CMakeFindDependencyMacro)
+find_dependency(Eigen3 3.3 NO_MODULE)
+
+include("${CMAKE_CURRENT_LIST_DIR}/grasp_coreTargets.cmake")
+
+check_required_components(grasp_core)

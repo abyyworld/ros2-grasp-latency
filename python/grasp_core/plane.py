@@ -1,16 +1,24 @@
 """S3: RANSAC table removal.
 
 This stage is the pipeline's arithmetic floor. Scoring `iterations` candidate
-planes against `M` points is `3 * M * iterations` multiply-adds that no
-implementation can avoid, so the only question is how the work is issued. The
-scalar reading of the spec is a doubly nested loop; the array reading is one
-matrix product per block of points, which is the same arithmetic handed to a
-BLAS kernel instead of to the C compiler. Both are honest readings of the same
-spec, and the fairness rule says Python is allowed to take the second one.
+planes against `M` points is work no implementation can avoid; the only
+question is how it is issued. The scalar reading of the spec is a doubly nested
+loop, the array reading is one matrix product per block of points, and both are
+honest readings of the same spec. The fairness rule says Python is allowed to
+take the second one.
 
-Points are blocked so that the `block x iterations` distance matrix stays in
-cache: the whole point of the reformulation is that each point is read from
-memory once and scored against every candidate while it is still hot.
+Two things make the array form worth the trouble:
+
+* Points are blocked so the `block x candidates` distance matrix stays inside
+  L2. Each point is read from memory once and scored against every candidate
+  while it is still hot. Block size is `implementation.ransac_block_points`.
+* Points are carried in homogeneous form, so `n . p + d` is one matrix product
+  rather than a product and a broadcast add. Measured on the 640x480 corpus the
+  broadcast add cost more than the extra column of arithmetic does.
+
+Candidates the spec scores as zero (degenerate triples, normals that tilt too
+far from vertical) are compacted out before the product rather than multiplied
+by and thrown away, which is what "score = 0; continue" says to do.
 """
 from __future__ import annotations
 
@@ -18,23 +26,18 @@ import numpy as np
 
 from .config import canonicalise_columns
 
-# ALGORITHM.md S3: a candidate whose edge cross product is shorter than this is
-# three collinear points, not a plane. Not a tuning constant, so not in the
-# config: any value in the neighbourhood picks out exactly the degenerate ones.
+# ALGORITHM.md S3: an edge cross product shorter than this is three collinear
+# points, not a plane. Not a tuning constant, so not in the config; any value
+# in this neighbourhood picks out exactly the degenerate triples.
 DEGENERATE_NORM = 1e-12
-
-# A normal that scores nothing, used to keep the candidate matrix rectangular:
-# an offset this large puts every point far outside the inlier band, so a
-# rejected candidate contributes a column of zeroes instead of a reshape.
-REJECTED_OFFSET = 1e30
 
 
 class PlaneRemover:
     __slots__ = ('_deviates', '_iterations', '_threshold', '_min_cos',
-                 '_min_inliers', '_removal_offset', '_block', '_capacity',
-                 '_p64', '_dist', '_hit', '_counts', '_partial', '_signed',
-                 '_mask', '_inliers', '_centred', '_normals', '_offsets',
-                 '_normals_t', '_valid', 'plane')
+                 '_min_inliers', '_removal_offset', '_block', '_points',
+                 '_dist_flat', '_hit_flat', '_plane_flat', '_counts',
+                 '_partial', '_signed', '_mask', '_inliers', '_centred',
+                 '_objects', '_normals', '_offsets', '_valid', 'plane')
 
     def __init__(self, plane: dict, deviates: np.ndarray, block_points: int):
         self._iterations = plane['iterations']
@@ -44,52 +47,53 @@ class PlaneRemover:
         self._removal_offset = plane['inlier_threshold_m'] + plane['clearance_m']
         self._block = block_points
         self._deviates = deviates.reshape(self._iterations, 3)
-        self._capacity = 0
 
         k = self._iterations
-        self._dist = np.empty((block_points, k), dtype=np.float64)
-        self._hit = np.empty((block_points, k), dtype=np.bool_)
+        self._dist_flat = np.empty(block_points * k, dtype=np.float64)
+        self._hit_flat = np.empty(block_points * k, dtype=np.bool_)
+        self._plane_flat = np.empty(4 * k, dtype=np.float64)
         self._counts = np.empty(k, dtype=np.int64)
-        self._partial = np.empty(k, dtype=np.int64)
+        self._partial = np.empty(k, dtype=np.int16)
         self._normals = np.empty((k, 3), dtype=np.float64)
-        self._normals_t = np.empty((3, k), dtype=np.float64)
         self._offsets = np.empty(k, dtype=np.float64)
         self._valid = np.empty(k, dtype=np.bool_)
         self.plane = np.zeros(4, dtype=np.float64)
 
     def resize(self, capacity: int) -> None:
-        self._capacity = capacity
-        self._p64 = np.empty((capacity, 3), dtype=np.float64)
+        # Column 3 is the homogeneous one and is written once, here.
+        self._points = np.empty((capacity, 4), dtype=np.float64)
+        self._points[:, 3] = 1.0
         self._signed = np.empty(capacity, dtype=np.float64)
         self._mask = np.empty(capacity, dtype=np.bool_)
-        self._inliers = np.empty((capacity, 3), dtype=np.float64)
+        self._inliers = np.empty((capacity, 4), dtype=np.float64)
         self._centred = np.empty((capacity, 3), dtype=np.float64)
+        self._objects = np.empty((capacity, 3), dtype=np.float64)
 
     def run(self, points_base: np.ndarray):
-        """Return (points_object as float64, plane_found).
+        """Return (points_object, plane_found).
 
-        The returned array holds float32 values widened to float64. Widening is
-        exact, so the values are the ones ALGORITHM.md specifies; carrying them
-        as float64 saves every later stage a conversion it would otherwise
-        repeat, and rule 1 makes every later reduction float64 regardless.
+        `points_object` is float64 holding exactly the float32 values
+        ALGORITHM.md specifies: widening is lossless, and carrying the wide copy
+        saves S4 and S5 a conversion each while rule 1 makes their reductions
+        float64 anyway.
         """
         m = points_base.shape[0]
-        points = self._p64[:m]
-        np.copyto(points, points_base)
+        homogeneous = self._points[:m]
+        np.copyto(homogeneous[:, :3], points_base)
         if m < 3:
             self.plane[:] = 0.0
-            return points, False
+            objects = self._objects[:m]
+            np.copyto(objects, homogeneous[:, :3])
+            return objects, False
 
         index = np.minimum(m - 1, (self._deviates * m).astype(np.int64))
         i0 = index[:, 0]
         i1 = index[:, 1]
         i2 = index[:, 2]
-        p0 = points[i0]
-        edge1 = points[i1] - p0
-        edge2 = points[i2] - p0
-
+        p0 = homogeneous[i0, :3]
         normals = self._normals
-        np.cross(edge1, edge2, out=normals)
+        normals[...] = np.cross(homogeneous[i1, :3] - p0,
+                                homogeneous[i2, :3] - p0)
         length = np.linalg.norm(normals, axis=1)
 
         valid = self._valid
@@ -98,74 +102,84 @@ class PlaneRemover:
         np.logical_and(valid, i0 != i2, out=valid)
         np.logical_and(valid, length >= DEGENERATE_NORM, out=valid)
         np.divide(normals, np.where(valid, length, 1.0)[:, None], out=normals)
-        # Orient upward first, then reject what is still not close to level:
-        # the spec's test is on the upward-oriented normal.
+        # Orient upward first: the spec tests the upward-oriented normal.
         np.multiply(normals, np.where(normals[:, 2] < 0.0, -1.0, 1.0)[:, None],
                     out=normals)
         np.logical_and(valid, normals[:, 2] >= self._min_cos, out=valid)
+        np.negative(np.einsum('ij,ij->i', normals, p0), out=self._offsets)
 
-        offsets = self._offsets
-        np.negative(np.einsum('ij,ij->i', normals, p0), out=offsets)
-        np.copyto(normals, 0.0, where=~valid[:, None])
-        np.copyto(offsets, REJECTED_OFFSET, where=~valid)
-        np.copyto(self._normals_t, normals.T)
+        candidates = np.nonzero(valid)[0]
+        wide = candidates.size
+        if wide == 0:
+            self.plane[:] = 0.0
+            objects = self._objects[:m]
+            np.copyto(objects, homogeneous[:, :3])
+            return objects, False
 
-        counts = self._counts
+        model = self._plane_flat[:4 * wide].reshape(4, wide)
+        model[:3] = normals[candidates].T
+        model[3] = self._offsets[candidates]
+
+        counts = self._counts[:wide]
         counts[:] = 0
+        partial = self._partial[:wide]
+        dist_flat = self._dist_flat
+        hit_flat = self._hit_flat
         threshold = self._threshold
-        dist = self._dist
-        hit = self._hit
-        partial = self._partial
         block = self._block
-        normals_t = self._normals_t
         for start in range(0, m, block):
-            stop = min(start + block, m)
-            rows = stop - start
-            chunk = dist[:rows]
-            np.matmul(points[start:stop], normals_t, out=chunk)
-            np.add(chunk, offsets, out=chunk)
+            stop = start + block
+            if stop > m:
+                stop = m
+            span = (stop - start) * wide
+            chunk = dist_flat[:span].reshape(stop - start, wide)
+            inside = hit_flat[:span].reshape(stop - start, wide)
+            np.matmul(homogeneous[start:stop], model, out=chunk)
             np.abs(chunk, out=chunk)
-            np.less(chunk, threshold, out=hit[:rows])
-            np.count_nonzero(hit[:rows], axis=0, out=partial)
+            np.less(chunk, threshold, out=inside)
+            # A bool view summed as int16 is three times cheaper than the
+            # int64 reduction numpy picks by default, and a block cannot
+            # overflow it.
+            np.add.reduce(inside.view(np.uint8), axis=0, dtype=np.int16,
+                          out=partial)
             np.add(counts, partial, out=counts)
 
-        # argmax returns the lowest index among equal maxima, which is the
-        # spec's "strictly greatest score, so the earliest iteration wins".
-        best = int(np.argmax(counts))
-        if counts[best] < self._min_inliers:
+        # argmax returns the lowest index among equal maxima, and compaction
+        # preserved candidate order, so this is the spec's "strictly greatest
+        # score, earliest iteration wins a tie".
+        winner = int(np.argmax(counts))
+        if counts[winner] < self._min_inliers:
             self.plane[:] = 0.0
-            return points, False
+            objects = self._objects[:m]
+            np.copyto(objects, homogeneous[:, :3])
+            return objects, False
 
-        normal = normals[best]
         signed = self._signed[:m]
         mask = self._mask[:m]
-        np.matmul(points, normal, out=signed)
-        np.add(signed, offsets[best], out=signed)
+        np.matmul(homogeneous, model[:, winner], out=signed)
         np.less(np.abs(signed, out=signed), threshold, out=mask)
 
         count = int(np.count_nonzero(mask))
         inliers = self._inliers[:count]
-        np.compress(mask, points, axis=0, out=inliers)
-        centroid = inliers.mean(axis=0)
+        np.compress(mask, homogeneous, axis=0, out=inliers)
+        centroid = inliers[:, :3].mean(axis=0)
         centred = self._centred[:count]
-        np.subtract(inliers, centroid, out=centred)
-        covariance = (centred.T @ centred) / count
-        _, vectors = np.linalg.eigh(covariance)
+        np.subtract(inliers[:, :3], centroid, out=centred)
+        _, vectors = np.linalg.eigh((centred.T @ centred) / count)
         canonicalise_columns(vectors)
         normal = vectors[:, 0]
         if normal[2] < 0.0:
             normal = -normal
         offset = -float(normal @ centroid)
 
-        np.matmul(points, normal, out=signed)
-        np.add(signed, offset, out=signed)
-        # Everything within the band, and everything below the plane, goes in
-        # one comparison. What is left is what stands on the table.
+        refit = self.plane
+        refit[:3] = normal
+        refit[3] = offset
+        np.matmul(homogeneous, refit, out=signed)
+        # The band and everything below it go in one comparison. What survives
+        # is what stands on the table.
         np.greater_equal(signed, self._removal_offset, out=mask)
         kept = int(np.count_nonzero(mask))
-        objects = self._inliers[:kept]
-        np.compress(mask, points, axis=0, out=objects)
-
-        self.plane[:3] = normal
-        self.plane[3] = offset
+        objects = self._objects[:kept]
+        np.compress(mask, homogeneous[:, :3], axis=0, out=objects)
         return objects, True
