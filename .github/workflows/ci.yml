@@ -94,9 +94,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t grasp-latency -f docker/Dockerfile .
-      - name: The benchmark script parses and its help works
-        run: |
-          docker run --rm grasp-latency bash -c 'bash -n docker/run_ros_benchmark.sh'
+      - name: The benchmark script parses
+        run: docker run --rm grasp-latency bash -c 'bash -n docker/run_ros_benchmark.sh'
+
+      # stop() has had three bugs, and the first real run hung on it after the
+      # data had already been collected. It is tested against a process tree
+      # that ignores SIGINT and SIGTERM the way ros2 launch did.
+      - name: Teardown terminates and leaves no orphans
+        run: docker run --rm grasp-latency bash docker/test_teardown.sh
 
   ros2:
     name: colcon build (ROS 2 Jazzy)

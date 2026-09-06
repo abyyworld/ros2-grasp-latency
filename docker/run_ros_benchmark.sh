@@ -216,6 +216,22 @@ wait_for_lifecycle() {
   return 1
 }
 
+# Every pid under `root`, root last, listed while the tree is still intact.
+#
+# The listing has to happen BEFORE anything is killed. Killing a supervisor
+# reparents its children to pid 1, so `pgrep -P` on a dead parent returns
+# nothing and the children survive as orphans holding their DDS participants,
+# which is the exact failure this is meant to prevent. A test with a parent and
+# child that both ignore SIGINT and SIGTERM caught that: the parent was reaped
+# and the child was not.
+descendants_of() {
+  local root="$1" child
+  for child in $(pgrep -P "${root}" 2>/dev/null); do
+    descendants_of "${child}"
+  done
+  printf '%s\n' "${root}"
+}
+
 # A launch that will not stop must not stop the run. `ros2 launch` forwards
 # SIGINT to its children and then waits for them, and a lifecycle node that
 # declines to leave the active state leaves it waiting forever: the first real
@@ -228,7 +244,10 @@ wait_for_lifecycle() {
 # took: a run that needed SIGKILL is still a valid measurement of the pipeline,
 # but it is not a clean shutdown and the reader should know.
 stop() {
-  local pid="$1" waited=0
+  local pid="$1" waited=0 tree
+
+  # Snapshot the tree first: see descendants_of.
+  tree="$(descendants_of "${pid}")"
 
   kill -INT "${pid}" 2>/dev/null || true
   while (( waited < 15 )) && kill -0 "${pid}" 2>/dev/null; do
@@ -253,13 +272,19 @@ stop() {
 
   wait "${pid}" 2>/dev/null || true
 
-  # `ros2 launch` is a supervisor: killing it can orphan the nodes it started,
-  # and an orphaned node keeps its DDS participant and its topic alive, so the
-  # next mode would discover a stale publisher and measure two nodes at once.
-  pkill -KILL -f "grasp_node" 2>/dev/null || true
-  pkill -KILL -f "frame_publisher" 2>/dev/null || true
-  pkill -KILL -f "rosbag2_recorder" 2>/dev/null || true
-  sleep 1
+  # `ros2 launch` is a supervisor: SIGKILLing it orphans the nodes it started,
+  # and an orphan keeps its DDS participant and its topic, so the next arm
+  # would discover a stale publisher and record two nodes at once. Reap this
+  # launch's own descendants, found by walking the tree, and nothing else:
+  # stop() is called on the recorder before the node, so a pkill by name would
+  # SIGKILL a recorder that is still flushing the bag this run exists to
+  # produce.
+  local orphan
+  for orphan in ${tree}; do
+    if kill -0 "${orphan}" 2>/dev/null; then
+      kill -KILL "${orphan}" 2>/dev/null || true
+    fi
+  done
 }
 
 settle() {
