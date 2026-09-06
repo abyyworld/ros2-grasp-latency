@@ -25,6 +25,13 @@ Every addition should be framed as a question with a measured answer.
    distinctive thing about this work.
 5. **Do not overstate authorship or imply institutional backing.**
 
+## Git
+
+Commit and push as `abyyworld <annolieberto@gmail.com>`, and only ever to that
+account. Do not add a `Co-Authored-By` trailer, a session link, or any other
+assistant attribution to a commit message, a pull request, or anything else
+pushed to a remote. This is portfolio work and it carries one author's name.
+
 ## Technical invariants
 
 - Both implementations read every constant from `assets/pipeline_config.json`
