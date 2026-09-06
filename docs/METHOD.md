@@ -307,8 +307,13 @@ pipeline's first instruction and a reader is entitled to know its size.
 ## 11. The IK null-space sweep
 
 `ALGORITHM.md` records that `ik.nullspace_gain` is 0 because the term did not
-earn its place, and points here for the measurement. Sweeping the gain over the
-100 frames of `table_640x480`, seeding every frame from `q_neutral`:
+earn its place, and points here for the measurement. `ik.damping` is swept
+against `ik.nullspace_gain` over the grasp poses S5 produces on
+`table_640x480`, which are the targets the pipeline actually asks for rather
+than reachable poses drawn at random, seeding every solve from `q_neutral`.
+`tools/fill_method_placeholders.py --measure-nullspace` reruns it and writes
+`results/nullspace_sweep.json`, which is what the table below is generated
+from.
 
 | `nullspace_gain` | converged | median iterations | max iterations | worst position error | worst orientation error |
 |---:|---:|---:|---:|---:|---:|

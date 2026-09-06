@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Threat T1, measured: how the py:cpp ratio moves when the workload mix moves.
 
-The headline number in `results/RESULTS.md` is 1.50x at p50, and it is a
-property of one pipeline at one set of constants. At `deproject.stride` 1 and
-`plane.iterations` 128 the RANSAC plane stage is 95.6% of the C++ frame, and
-that stage is a large blocked array reduction that NumPy reaches through the
-same compiled loops Eigen does. A pipeline shaped like that is close to the
-best case for Python. `docs/METHOD.md` used to say so and then assert, without
-measuring, that changing the constants changes the ratio.
+The headline ratio in `results/RESULTS.md` is a property of one pipeline at
+one set of constants. At `deproject.stride` 1 and `plane.iterations` 128 the
+RANSAC plane stage is the overwhelming majority of the frame in both
+implementations, and that stage is one large array reduction: Python issues it
+as a handful of NumPy calls per block of points and then waits inside compiled
+loops. A pipeline shaped like that is close to the best case for Python.
+`docs/METHOD.md` used to say so and then assert, without measuring, that
+changing the constants changes the ratio.
 
 This script turns the assertion into a curve. It sweeps the two constants that
 set how much of the frame is bulk array work:
@@ -29,25 +30,25 @@ variable that transfers to somebody else's pipeline; the y axis is the ratio.
    configuration it is running: both read every constant from the file they are
    handed, which is the invariant `tests/test_config_is_sole_source.py` exists
    to protect.
-1b. Re-chooses `implementation.ransac_block_points` for each configuration by
-   measurement, the way the committed value was chosen. That constant is read
-   only by the Python plane stage, it changes memory traffic and never output,
-   and 512 was picked when the distance block was 512 x 128 float64. At 8
-   iterations the same 512 leaves the Python loop running the same number of
-   times over a sixteenth of the arithmetic, so keeping it would charge Python
-   for a constant tuned to a configuration it is no longer in, and the
-   fairness rule in ALGORITHM.md forbids exactly that. The candidate that wins
-   and the whole calibration curve go into `workload_sweep.json`, so the cost
-   of the stale value is visible rather than hidden.
 2. Writes a derived deviate table: the **first** `3 * iterations` doubles of
    the committed `assets/ransac_uniform.bin`. A prefix rather than a fresh
    draw, so a 32-iteration run scores the same first 32 candidate triples the
    128-iteration run scored, and the difference between two rows is the amount
    of work and nothing else.
-3. Runs both benchmark binaries over the same corpus, in the same order the
+3. Re-chooses `implementation.ransac_block_points` by measurement, the way the
+   committed value was chosen. That constant is read only by the Python plane
+   stage, it changes memory traffic and never output, and 512 was picked when
+   the distance block was 512 x 128 float64. At 8 iterations the same 512
+   leaves the Python loop running the same number of times over a sixteenth of
+   the arithmetic, so keeping it would charge Python for a constant tuned to a
+   configuration it is no longer in, and the fairness rule in ALGORITHM.md
+   forbids exactly that. The candidate that wins and the whole calibration
+   curve go into `workload_sweep.json`, so the cost of the stale value is
+   visible rather than hidden.
+4. Runs both benchmark binaries over the same corpus, in the same order the
    published run uses: C++ first, then Python, no BLAS thread pinning, so a row
    here is comparable with the headline row.
-4. Runs `harness/compare_outputs.py` as a gate. A configuration where the two
+5. Runs `harness/compare_outputs.py` as a gate. A configuration where the two
    implementations disagree is not a data point, it is a bug, and the sweep
    stops rather than publishing the row.
 
@@ -55,12 +56,19 @@ variable that transfers to somebody else's pipeline; the y axis is the ratio.
 
 It does not lower `benchmark.measured_frames` silently. The default here is 500
 measured frames per implementation per configuration rather than the 2000 of
-the published run, because the sweep runs twelve benchmarks rather than two,
-and the count is written into `workload_sweep.json`, into the CSV and into the
-plot caption. At 500 samples over a 100-frame store the p99 is a specific
-order statistic of a specific size, so the metadata records which sample it is:
+the published run, because the sweep runs a benchmark pair and a block
+calibration for every configuration rather than one pair in total, and the
+count is written into `workload_sweep.json`, into the CSV and into the plot
+caption. At 500 samples over a 100-frame store the p99 is a specific order
+statistic of a specific size, so the metadata records which sample it is:
 quoting a p99 without saying what it was counted from is how a tail number
 becomes decoration.
+
+It also does not touch either implementation, `assets/pipeline_config.json`, or
+the committed deviate table. Everything it writes goes to a work directory that
+is temporary by default, and the published outputs are the three
+`results/workload_sweep.*` files plus the section it maintains inside
+`results/RESULTS.md`.
 
 Usage:
   workload_sweep.py --dataset data/table_640x480 --frames 500
@@ -447,6 +455,42 @@ def measure(variant: Variant, args, base_config: dict, work_dir: Path,
 
 # ----------------------------------------------------------------- outputs
 
+def published_reference(out_dir: Path, dataset: str) -> dict | None:
+    """The headline run's own numbers for this corpus, if they are on disk.
+
+    The baseline configuration in this sweep is the published one at a quarter
+    of the frame count, so it is a reproduction and should be reported as one:
+    if 500 frames do not land near the 2000-frame run, the shorter runs in
+    every other row are worth less. Missing or unreadable `summary.json` is not
+    an error, it just means the check cannot be made this time.
+    """
+    path = out_dir / 'summary.json'
+    if not path.is_file():
+        return None
+    try:
+        summary = json.loads(path.read_text(encoding='utf-8'))
+        picked = {}
+        for entry in summary['groups']:
+            if entry['dataset'] == dataset and entry['transport'] == 'inproc' \
+                    and entry['impl'] in ('cpp', 'py'):
+                picked[entry['impl']] = entry['total_ns']
+        if {'cpp', 'py'} - set(picked):
+            return None
+        return {
+            'source': str(path.relative_to(REPO_ROOT))
+            if path.is_relative_to(REPO_ROOT) else str(path),
+            'frames': picked['cpp']['n'],
+            'cpp_p50_ns': picked['cpp']['p50'],
+            'cpp_p99_ns': picked['cpp']['p99'],
+            'py_p50_ns': picked['py']['p50'],
+            'py_p99_ns': picked['py']['p99'],
+            'ratio_p50': picked['py']['p50'] / picked['cpp']['p50'],
+            'ratio_p99': picked['py']['p99'] / picked['cpp']['p99'],
+        }
+    except (json.JSONDecodeError, KeyError, ZeroDivisionError, OSError):
+        return None
+
+
 def git_revision() -> str | None:
     try:
         out = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=REPO_ROOT,
@@ -485,6 +529,20 @@ CSV_COLUMNS = (
     'bail_plane', 'bail_grasp', 'bail_ik', 'gate_worst_abs_deviation',
     'gate_frames_compared',
 )
+
+
+def format_load(load) -> str:
+    if not load:
+        return 'unavailable'
+    return ', '.join(f'{value:.2f}' for value in load)
+
+
+def ordinal(number: int) -> str:
+    if 10 <= number % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(number % 10, 'th')
+    return f'{number}{suffix}'
 
 
 def maybe_ms(value) -> str:
@@ -547,47 +605,83 @@ def plot(summary: dict, path: Path) -> None:
 
     rows = summary['configurations']
     order = sorted(rows, key=lambda r: r['plane_share_cpp'])
-    shares = [100.0 * r['plane_share_cpp'] for r in order]
-    p50 = [r['ratio_p50'] for r in order]
-    p99 = [r['ratio_p99'] for r in order]
+    baseline = next(r for r in rows if r['baseline'])
+
+    # Two families, drawn as two lines through the shared published point,
+    # because they move the shape differently: striding shrinks the whole
+    # cloud, so the C++ frame keeps roughly its proportions while Python's
+    # per-call overheads do not shrink with it, and cutting iterations attacks
+    # the plane stage alone. One line through all six points would hide that.
+    families = [
+        ('deproject.stride', '#1f4e79',
+         [r for r in rows if r['plane_iterations'] == baseline['plane_iterations']],
+         lambda r: f"stride {r['stride']}"),
+        ('plane.iterations', '#7a3d9c',
+         [r for r in rows if r['stride'] == baseline['stride']],
+         lambda r: f"{r['plane_iterations']} iters"),
+    ]
 
     figure, axes = plt.subplots(1, 2, figsize=(13.0, 5.4))
 
     axis = axes[0]
-    axis.plot(shares, p50, '-o', color='#1f4e79', linewidth=1.6,
-              label='py:cpp at p50')
-    axis.plot(shares, p99, '--s', color='#c0504d', linewidth=1.6,
-              markerfacecolor='none', label='py:cpp at p99')
-    for row, x, y in zip(order, shares, p50):
-        marker = ' (published)' if row['baseline'] else ''
-        axis.annotate(f"{row['label']}{marker}", (x, y),
-                      textcoords='offset points', xytext=(6, -12), fontsize=7.5,
-                      color='#1f4e79')
+    for name, colour, members, tag in families:
+        members = sorted(members, key=lambda r: r['plane_share_cpp'])
+        shares = [100.0 * r['plane_share_cpp'] for r in members]
+        axis.plot(shares, [r['ratio_p50'] for r in members], '-o',
+                  color=colour, linewidth=1.7, label=f'{name}, p50')
+        axis.plot(shares, [r['ratio_p99'] for r in members], '--s',
+                  color=colour, linewidth=1.1, alpha=0.55,
+                  markerfacecolor='none', label=f'{name}, p99')
+        # Families are annotated on opposite sides: the stride points crowd
+        # together near the published share, and one label on top of another
+        # is a plot that has to be read from the CSV instead.
+        below = name.startswith('deproject')
+        for row, x in zip(members, shares):
+            axis.annotate(tag(row), (x, row['ratio_p50']),
+                          textcoords='offset points',
+                          xytext=(7, -13 if below else 7),
+                          fontsize=8, color=colour)
+    axis.plot([100.0 * baseline['plane_share_cpp']], [baseline['ratio_p50']],
+              marker='*', markersize=15, linestyle='none', color='#c0504d',
+              label='published configuration')
     axis.axhline(1.0, color='0.6', linewidth=0.8)
     axis.set_xlabel('plane stage as a share of the C++ p50 frame, per cent')
     axis.set_ylabel('Python latency divided by C++ latency')
-    axis.set_title('The ratio is a function of how much of the frame\n'
+    axis.set_title('The ratio against how much of the frame\n'
                    'is one large array reduction')
     axis.grid(alpha=0.25)
-    axis.legend(fontsize=9, loc='upper right')
+    axis.legend(fontsize=8, loc='upper right')
 
+    # The second panel is the mechanism behind the first: what each frame is
+    # made of, C++ beside Python at every configuration. The C++ bar barely
+    # changes shape while the Python bar's plane block collapses and the
+    # per-call stages take its place, which is the whole of the effect.
     axis = axes[1]
-    labels = [r['label'].replace(', ', '\n') for r in order]
-    bottom = np.zeros(len(order))
+    centres = np.arange(len(order), dtype=np.float64)
+    width = 0.36
     palette = plt.get_cmap('tab20')
-    for index, key in enumerate(STAGE_KEYS):
-        values = np.array([100.0 * r['cpp']['stage_ns'][key]['p50_ns']
-                           / r['cpp']['total_ns']['p50_ns'] for r in order])
-        axis.bar(labels, values, bottom=bottom, label=key,
-                 color=palette(index / len(STAGE_KEYS)), edgecolor='white',
-                 linewidth=0.5)
-        bottom += values
-    axis.set_ylabel('share of the C++ p50 frame, per cent')
-    axis.set_ylim(0, 100)
-    axis.set_title('What the C++ frame is made of at each configuration')
-    axis.legend(fontsize=8, ncol=2, loc='lower left')
+    for offset, impl in ((-0.5 * width - 0.02, 'cpp'), (0.5 * width + 0.02, 'py')):
+        bottom = np.zeros(len(order))
+        for index, key in enumerate(STAGE_KEYS):
+            values = np.array([100.0 * r[impl]['stage_ns'][key]['p50_ns']
+                               / r[impl]['total_ns']['p50_ns'] for r in order])
+            axis.bar(centres + offset, values, width=width, bottom=bottom,
+                     label=key if impl == 'cpp' else None,
+                     color=palette(index / len(STAGE_KEYS)),
+                     edgecolor='white', linewidth=0.4)
+            bottom += values
+        for centre in centres:
+            axis.text(centre + offset, 101.0, impl, ha='center', fontsize=7,
+                      color='0.3')
+    axis.set_xticks(centres)
+    axis.set_xticklabels([r['label'].replace(', ', '\n') for r in order],
+                         fontsize=8)
+    axis.set_ylabel('share of that implementation\'s p50 frame, per cent')
+    axis.set_ylim(0, 106)
+    axis.set_title('What the frame is made of, C++ beside Python')
+    axis.legend(fontsize=7, ncol=4, loc='upper center',
+                bbox_to_anchor=(0.5, -0.09), frameon=False)
     axis.grid(axis='y', alpha=0.25)
-    axis.tick_params(axis='x', labelsize=8)
 
     meta = summary['metadata']
     figure.suptitle(
@@ -622,6 +716,25 @@ def markdown_section(summary: dict) -> str:
         'configuration passed the equivalence gate before its row was written; '
         'the worst deviation column is what the gate observed.',
         '',
+    ]
+
+    reference = meta.get('published_reference')
+    if reference:
+        lines += [
+            f"The first row is the published configuration re-run at "
+            f"{meta['measured_frames']} frames, so it is also a check on the "
+            f"shorter runs the other rows use: the "
+            f"{reference['frames']}-frame run in the table above gives "
+            f"{reference['cpp_p50_ns'] / NS_PER_MS:.3f} ms and "
+            f"{reference['py_p50_ns'] / NS_PER_MS:.3f} ms at p50 for "
+            f"{reference['ratio_p50']:.2f}x, and this sweep gives "
+            f"{baseline['cpp']['total_ns']['p50_ns'] / NS_PER_MS:.3f} ms and "
+            f"{baseline['py']['total_ns']['p50_ns'] / NS_PER_MS:.3f} ms for "
+            f"{baseline['ratio_p50']:.2f}x.",
+            '',
+        ]
+
+    lines += [
         'The headline 1.50x is one point on a curve, and this is the curve. '
         'Two constants set how much of the frame is bulk array work: '
         '`deproject.stride`, which divides the point count by its square, and '
@@ -738,11 +851,15 @@ def markdown_section(summary: dict) -> str:
                 f"Ratio {row['ratio_p50']:.2f}x at p50, "
                 f"{row['ratio_p99']:.2f}x at p99.")
         if bail['not_graspable'] or bail['plane_not_found']:
-            note += (f" {bail['plane_not_found']} of "
+            note += (f" This row is not the same pipeline as the others: "
+                     f"{bail['plane_not_found']} of "
                      f"{row['cpp']['total_ns']['n']} measured frames found no "
                      f"plane and {bail['not_graspable']} found no cluster "
-                     f"large enough to grasp, so those frames stop before IK "
-                     f"and this row times a shorter pipeline than the others.")
+                     f"holding `cluster.min_points`, so they stop at S4 and "
+                     f"never reach grasp synthesis, IK or the trajectory. "
+                     f"Subsampling that hard removes the object as well as the "
+                     f"cost, which is itself the answer to whether a stride "
+                     f"like this is free.")
         lines.append(note)
 
     lines += block_paragraph()
@@ -752,11 +869,18 @@ def markdown_section(summary: dict) -> str:
         f"The p99 columns come from {meta['measured_frames']} samples over "
         f"{baseline['cpp']['distinct_frames']} distinct store frames, so the "
         f"value quoted is the "
-        f"{baseline['cpp']['p99_rank_from_slowest']}th slowest sample of the "
-        'run and carries the repeat structure described in threat T8. The p50 '
+        f"{ordinal(baseline['cpp']['p99_rank_from_slowest'])} slowest sample "
+        'of the run and carries the repeat structure described in threat T8. '
+        'The p50 '
         'columns are the ones to lean on; the p99 columns are here because a '
         'ratio that moves at the median and not in the tail would be a '
         'different finding from one that moves in both.',
+        '',
+        f"The box is shared and unpinned, so the load average is recorded at "
+        f"both ends of the sweep: "
+        f"{format_load(meta.get('load_average_at_start'))} at the start and "
+        f"{format_load(meta['host'].get('load_average'))} at the end. Threat "
+        f"T2 is why that matters and what it does not excuse.",
         '',
         f"Files: `workload_sweep.json`, `workload_sweep.csv`, "
         f"`workload_sweep.png`. Method and the threat this measures: "
@@ -864,6 +988,14 @@ def main(argv=None) -> int:
     variants = plan(base_config, args.strides, args.iterations)
     pixels = manifest['width'] * manifest['height']
 
+    # Recorded at both ends because the box is shared and unpinned (threat T2):
+    # a row taken while something else was running should be spottable rather
+    # than trusted, and one number at the end cannot show that.
+    try:
+        load_at_start = list(os.getloadavg())
+    except OSError:
+        load_at_start = None
+
     started = time.time()
     rows = []
     for index, variant in enumerate(variants, 1):
@@ -915,7 +1047,10 @@ def main(argv=None) -> int:
                 'doubles of the committed table, so a shorter run scores the '
                 'same candidate triples the full run scored first.',
             'elapsed_s': round(time.time() - started, 1),
+            'load_average_at_start': load_at_start,
             'host': observed_host(),
+            'published_reference': published_reference(out_dir,
+                                                       manifest['name']),
         },
         'configurations': rows,
     }
