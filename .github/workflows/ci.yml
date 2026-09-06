@@ -1,0 +1,123 @@
+name: ci
+
+# Two things this has to prove on every commit: that the ROS 2 packages really
+# compile (they cannot be built in the environment most of this was written in,
+# so CI is the only place that claim is ever tested), and that the two
+# pipelines still agree. A latency comparison between two programs that compute
+# different things is worthless, so the equivalence check is a gate, not a
+# report.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  style:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/check_style.py
+
+  core:
+    name: cores, tests and equivalence gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libeigen3-dev
+          python3 -m pip install --quiet -r requirements.txt
+
+      - name: Assets are regenerable, not just committed
+        run: |
+          python3 tools/extract_chain.py assets/franka/urdf/panda.urdf /tmp/chain.json
+          python3 tools/make_ransac_table.py assets/pipeline_config.json /tmp/ransac.bin
+          cmp /tmp/chain.json assets/franka/panda_chain.json
+          cmp /tmp/ransac.bin assets/ransac_uniform.bin
+
+      - name: Python tests
+        run: python3 -m pytest tests/ python/tests/ -q
+
+      - name: Build C++
+        run: |
+          cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build cpp/build -j"$(nproc)"
+
+      - name: C++ unit tests
+        working-directory: cpp/build
+        run: ctest --output-on-failure
+
+      # Small and fast: CI is checking that the pipeline runs and that the two
+      # implementations agree, not producing publishable percentiles. Real
+      # numbers come from a quiet machine, see docs/TOOLCHAIN.md.
+      - name: Smoke corpus
+        run: |
+          python3 harness/make_dataset.py --name ci_320x240 --width 320 --height 240 \
+                                          --frames 12 --out data
+
+      - name: Run both pipelines
+        run: |
+          ./cpp/build/bench_pipeline --dataset data/ci_320x240 \
+            --out-timing /tmp/cpp.timing.jsonl --out-output /tmp/cpp.output.jsonl \
+            --warmup 2 --frames 24
+          python3 python/bench/bench_pipeline.py --dataset data/ci_320x240 \
+            --out-timing /tmp/py.timing.jsonl --out-output /tmp/py.output.jsonl \
+            --warmup 2 --frames 24
+
+      - name: Equivalence gate
+        run: python3 harness/compare_outputs.py /tmp/cpp.output.jsonl /tmp/py.output.jsonl
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-latency-records
+          path: /tmp/*.jsonl
+          if-no-files-found: warn
+
+  ros2:
+    name: colcon build (ROS 2 Jazzy)
+    runs-on: ubuntu-24.04
+    container: ros:jazzy-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq libeigen3-dev python3-pip
+          pip3 install --quiet --break-system-packages numpy scipy
+
+      # The ROS packages consume the pipeline as an installed CMake target, so
+      # it has to be built and installed before colcon sees the workspace.
+      - name: Build and install the ROS-independent core
+        run: |
+          cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/opt/grasp_core
+          cmake --build cpp/build -j"$(nproc)"
+          cmake --install cpp/build
+
+      - name: colcon build
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd ros2_ws
+          colcon build --event-handlers console_direct+ \
+            --cmake-args -DCMAKE_PREFIX_PATH=/opt/grasp_core
+
+      - name: Nodes start and shut down cleanly
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source ros2_ws/install/setup.bash
+          timeout 25s ros2 run grasp_node_cpp grasp_node --ros-args -p smoke_test:=true
+          timeout 25s ros2 run grasp_node_py grasp_node --ros-args -p smoke_test:=true
