@@ -5,7 +5,7 @@ build/
 install/
 log/
 cpp/build/
-data/frames/
+data/
 *.mcap
 *.db3
 .venv/
