@@ -50,7 +50,6 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / 'python'))
-sys.path.insert(0, str(REPO_ROOT / 'harness'))
 
 DEFAULT_CONFIG = REPO_ROOT / 'assets' / 'pipeline_config.json'
 STAGE_KEYS = ('decode', 'deproject', 'transform_crop', 'plane',
@@ -181,7 +180,6 @@ class PythonWorker(Worker):
     def __init__(self, store: FrameStore, config: Path, chain: Path,
                  ransac: Path):
         from grasp_core import GraspPipeline, calibrate_timer_ns
-        self._store = store
         self._pipeline = GraspPipeline(str(config), str(chain), str(ransac))
         self._pipeline.resize(store.height, store.width)
         self._timer = calibrate_timer_ns()

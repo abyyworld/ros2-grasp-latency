@@ -62,9 +62,30 @@ you pay to get an array out of it. It is measured, not skipped.
 
 ## S1. Deproject
 
-**In:** depth view, intrinsics `fx, fy, cx, cy` (rescaled from the reference
-resolution by `W / reference_width`), `stride`, `z_min_m`, `z_max_m`.
+**In:** depth view, intrinsics `fx, fy, cx, cy` derived for the stream's own
+`W x H` from the reference ones, `stride`, `z_min_m`, `z_max_m`.
 **Out:** `points_cam`, `N x 3` float32.
+
+The camera has square pixels and its principal point is the image centre, so
+the four numbers in the config are not four free parameters. A different sensor
+mode is the same optics reading a different window of the same array: the focal
+length in pixels follows the vertical resolution, and the principal point moves
+to the centre of whatever image comes out.
+
+```
+fx = fy = fy_ref * H / reference_height
+cx = (W - 1) / 2
+cy = (H - 1) / 2
+```
+
+At the reference resolution this returns the config's own `fx, fy, cx, cy`
+unchanged, which is the check that the rule and the constants agree. Scaling
+all four by `W / reference_width`, which this spec did until the 848x480 corpus
+was regenerated, treats a wider mode as a horizontally stretched 4:3 image: it
+put `cy` at 317.34 on a 480-row stream, 77 rows below the centre of an image
+whose optical axis is at row 239.5. Both implementations always saw the same
+intrinsics, so no published ratio moved, but the deprojected cloud was skewed
+and the camera was not one that exists.
 
 For every pixel `(u, v)` with `u % stride == 0` and `v % stride == 0`:
 
@@ -225,9 +246,15 @@ for it in [0, max_iterations):
 bias the redundant seventh degree of freedom toward the neutral posture. That
 matrix is not a null-space projector while `damping > 0`, so the bias leaked
 into task space and the solver stalled at a fixed point outside tolerance: **0
-of 100 real grasp targets converged**, with orientation error parked around
-198 mrad. A true pseudo-inverse projector does converge, but costs an SVD per
-iteration. Since every frame is seeded from `q_neutral` the solution already
+of 100 real grasp targets converged**, worst position error 2.79 mm against a
+0.5 mm tolerance. The failure is in position, not orientation: worst
+orientation error is 1.60 mrad, comfortably inside the 5 mrad tolerance. A true
+pseudo-inverse projector does converge, but costs an SVD per iteration.
+
+(An earlier revision of this file attributed the failure to a 198 mrad
+orientation error. That figure came from a sweep run before the S5 wrist fold
+existed, where unreachable orientations dominated the residual, and it does not
+reproduce against the shipped pipeline. The 0 of 100 result does reproduce.) Since every frame is seeded from `q_neutral` the solution already
 sits near the neutral posture, so the term earned nothing and
 `nullspace_gain` defaults to `0`. With it off and the S5 wrist fold in place,
 **100 of 100 targets converge in a median of 9 iterations**, worst-case

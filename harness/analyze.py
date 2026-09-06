@@ -850,6 +850,9 @@ def markdown(summary: dict, rate_sweep: dict | None,
         'parameters and the machine metadata.',
         '* `summary.csv`: the same aggregates in long form, one metric per row.',
         '* `rate_sweep.json`, `rate_sweep.csv`: the control-rate sweep.',
+        '* `equivalence.<corpus>.json`: the gate\'s per-field worst '
+        'deviations, one file per comparison. Read these before reading any '
+        'latency number.',
         '* `latency_cdf.png`, `stage_breakdown.png`, '
         '`resolution_scaling.png`, `rate_sweep.png`.',
         '',
@@ -956,8 +959,8 @@ def plots(summary: dict, groups: list[Group], out_dir: Path) -> list[Path]:
                       linewidth=1.6, label=f'{group.label} (n={group.n})')
         axis.axvline(budget_ms, color='0.3', linestyle=(0, (5, 3)),
                      linewidth=1.0)
-        axis.text(budget_ms, 0.04, f' {budget_ms:.1f} ms budget', fontsize=7,
-                  color='0.3', rotation=90, va='bottom')
+        axis.text(budget_ms, 0.99, f' {budget_ms:.1f} ms budget', fontsize=7,
+                  color='0.3', rotation=90, va='top')
         axis.set_title(f'{dataset} ({shape})', fontsize=10)
         axis.set_xlabel('end-to-end latency, ms')
         axis.set_ylabel('fraction of frames at or below')
@@ -1005,7 +1008,9 @@ def plots(summary: dict, groups: list[Group], out_dir: Path) -> list[Path]:
     figure, axis = plt.subplots(figsize=(7.5, 5.2))
     for impl, entry in sorted(summary['crossover'].items()):
         points = entry['points']
-        if not points:
+        # A single resolution is a dot, not a curve, and a dot on a scaling
+        # plot reads as an outlier. Those runs are in the tables instead.
+        if len(points) < 2:
             continue
         xs = [p['pixels'] / 1e6 for p in points]
         axis.plot(xs, [p['p50'] / NS_PER_MS for p in points], '-o',
@@ -1021,8 +1026,8 @@ def plots(summary: dict, groups: list[Group], out_dir: Path) -> list[Path]:
                       label=f"{impl} p99 crossing "
                             f"{crossing['pixels'] / 1e6:.2f} MP")
     axis.axhline(budget_ms, color='0.3', linestyle=(0, (5, 3)), linewidth=1.0)
-    axis.text(axis.get_xlim()[0], budget_ms, f' {budget_ms:.1f} ms budget',
-              fontsize=8, va='bottom', color='0.3')
+    axis.text(axis.get_xlim()[1], budget_ms, f'{budget_ms:.1f} ms budget ',
+              fontsize=8, va='bottom', ha='right', color='0.3')
     axis.set_xlabel('pixels per frame, megapixels')
     axis.set_ylabel('latency, ms')
     axis.set_title('Latency against resolution, and where p99 leaves the budget')

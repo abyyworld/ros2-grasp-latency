@@ -74,21 +74,21 @@ as `timer_overhead_ns`:
 
 | Implementation | Median cost of one clock read | Nine reads per frame |
 |---|---|---|
-| C++ | @@TIMER_CPP@@ ns | @@TIMER_CPP9@@ ns |
-| Python | @@TIMER_PY@@ ns | @@TIMER_PY9@@ ns |
+| C++ | 21 ns | 189 ns |
+| Python | 184 ns | 1656 ns |
 
 **The overhead is reported and not subtracted.** Two reasons. It is far below
 the resolution of anything being compared: the instrumentation floor is
-@@TIMER_PY9@@ ns against a Python frame of tens of milliseconds, which is
-@@TIMER_PY_SHARE@@ of it. And subtracting an estimate from a measurement makes
+1656 ns against a Python frame of tens of milliseconds, which is
+0.002% of it. And subtracting an estimate from a measurement makes
 the measurement depend on the quality of the estimate, which is a worse
 property than being a known amount too large. A reader who wants it removed has
 the number in every record.
 
 It is worth naming that the Python clock read costs about
-@@TIMER_RATIO@@ times the C++ one, and that this difference is charged to
+9 times the C++ one, and that this difference is charged to
 Python inside Python's own measurement. It is a real cost of instrumenting
-Python code, and at @@TIMER_BIAS_US@@ microseconds per frame it does not move
+Python code, and at 1.5 microseconds per frame it does not move
 any conclusion here. On a pipeline a hundred times faster it would.
 
 ## 3. Warm-up
@@ -239,7 +239,30 @@ occurred. A stated deviation is evidence; "passed" is an assertion, and it
 looks identical whether the true figure is 1e-15 or 9e-7. Measured over every
 corpus in this run:
 
-@@EQUIVALENCE_TABLE@@
+| field | values compared | worst absolute deviation |
+|---|---:|---|
+| `plane_found` | 500 | exact, every value |
+| `plane` | 2,000 | 2.5e-14 (unit normal, metres) |
+| `graspable` | 500 | exact, every value |
+| `width` | 500 | 1.4e-15 (metres) |
+| `tcp` | 8,000 | 1.4e-13 (metres, direction cosines) |
+| `converged` | 500 | exact, every value |
+| `iterations` | 500 | exact, every value |
+| `q` | 3,500 | 3.5e-13 (radians) |
+| `duration_s` | 500 | 2.5e-13 (seconds) |
+| `traj_checksum` | 500 | 499 identical, 1 on the rounding grid |
+
+Over `table_320x240`, `table_640x480`, `table_848x480` and `table_1280x720`,
+plus the single-BLAS-thread pass on `table_640x480`: five comparisons, 500
+frames, tolerance 1e-6.
+
+The one digest difference is `table_848x480` frame 95, and it is the
+boundary-straddle case described above rather than a divergence. Two waypoint
+values on that frame sit 6.7e-15 from a nine-decimal grid boundary while the
+joint solution that generates them agrees to 5.0e-14, which the quintic
+amplifies to at most 1.1e-12 inside a waypoint against a grid half-step of
+5.0e-10: two thousandths of one step. Nothing can hide in that, and the gate
+says so with the numbers rather than either failing or staying quiet.
 
 ## 10. The control-rate sweep
 
@@ -265,7 +288,7 @@ The scheduler is not free either. At a rate where nothing is backlogged, the
 difference between `response` and `compute` is the whole of it: waking from
 `time.sleep` a little after the release instant, plus reading the job's result
 out of the worker. Measured at 10 Hz on this machine it is
-@@SCHED_OVERHEAD@@ ms per job, dominated by sleep wake-up rather than by
+0.15 to 0.25 ms per job, dominated by sleep wake-up rather than by
 anything either implementation does.
 
 **Both implementations run under the same Python scheduler**, so the
@@ -276,7 +299,7 @@ compile flags read out of the CMake build tree so the shim cannot drift from
 the library. The latency attributed to a job is the pipeline's own `total_ns`,
 measured by the same instrumentation as the in-process benchmark, so the
 `ctypes` transition is not inside it. The transition is measured separately and
-recorded in `rate_sweep.json` metadata (@@CTYPES_NS@@ ns per call on this
+recorded in `rate_sweep.json` metadata (370 ns per call on this
 machine, an upper bound because the calibration loop's own Python overhead is
 inside it), because it does sit between the scheduler's release and the
 pipeline's first instruction and a reader is entitled to know its size.
@@ -287,9 +310,45 @@ pipeline's first instruction and a reader is entitled to know its size.
 earn its place, and points here for the measurement. Sweeping the gain over the
 100 frames of `table_640x480`, seeding every frame from `q_neutral`:
 
-@@NULLSPACE_TABLE@@
+| `nullspace_gain` | converged | median iterations | max iterations | worst position error | worst orientation error |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 100 of 100 | 9 | 36 | 0.494 mm | 0.3 mrad |
+| 0.01 | 100 of 100 | 9 | 96 | 0.500 mm | 0.2 mrad |
+| 0.02 | 95 of 100 | 10 | 100 | 0.804 mm | 0.3 mrad |
+| 0.05 | 0 of 100 | 100 | 100 | 1.902 mm | 0.7 mrad |
+| 0.1 | 0 of 100 | 100 | 100 | 2.867 mm | 1.4 mrad |
+| 0.2 | 0 of 100 | 100 | 100 | 5.690 mm | 2.9 mrad |
+| 0.5 | 0 of 100 | 100 | 100 | 13.811 mm | 6.9 mrad |
 
-@@NULLSPACE_PROSE@@
+At gain 0 the solver converges on 100 of 100 targets in a median of 9
+iterations, with a worst-case position error of 0.494 mm. That reproduces the
+two figures `ALGORITHM.md` quotes.
+
+Raising the gain buys nothing and costs convergence. The term is `I - J^T (J
+J^T + lambda^2 I)^-1 J`, which is not a null-space projector while `lambda >
+0`, so the posture bias leaks into task space instead of staying in the
+redundant degree of freedom. By gain 0.1 the solver reaches tolerance on 0 of
+100 targets and burns all 100 iterations on every frame.
+
+**One correction to `ALGORITHM.md`.** It records that at gain 0.1 the
+orientation error parks at about 198 mrad. That is not what this sweep finds:
+at gain 0.1 the orientation error stays inside 1.4 mrad, comfortably under the
+5 mrad tolerance, and what fails is *position*, with a worst case of 2.87 mm
+against a 0.5 mm tolerance. The likely explanation is that the 198 mrad figure
+predates the S5 wrist fold, which changed which of two equivalent grasp frames
+is demanded and so changed where the solver stalls. The conclusion is unchanged
+and the diagnosis is not, so the number should be corrected rather than
+repeated.
+
+A genuine pseudo-inverse projector does converge, and costs an SVD per
+iteration on a stage that runs every frame. Since every frame is seeded from
+`q_neutral` the solution already sits near the neutral posture, so the term had
+nothing left to buy and the default is 0.
+
+Reproduce it by writing a copy of `assets/pipeline_config.json` with a
+different `ik.nullspace_gain`, constructing `GraspPipeline` against that copy,
+running the 100 frames of the corpus and comparing `IKSolver.forward(q)`
+against the S5 target pose.
 
 ---
 
@@ -339,11 +398,30 @@ preemption: the Python process has more resident state to have evicted.
 
 **The published run was not taken on an idle machine, and how far that moves
 the numbers was measured rather than waved at.** The load average recorded in
-`summary.json` says what the box was carrying. To size the effect, the
-reference corpus was rerun and compared against the same corpus inside the
-published run:
+`summary.json` says what the box was carrying. To size the effect the whole
+benchmark was run twice, once with a neighbouring workload on the box and once
+with the box to itself:
 
-@@CONTENTION@@
+| run | p50 under load | p50 quiet | p99 under load | p99 quiet | p99 inflation |
+|---|---:|---:|---:|---:|---:|
+| `cpp.table_320x240` | 13.0 ms | 13.0 ms | 17.4 ms | 14.7 ms | 1.18x |
+| `py.table_320x240` | 22.1 ms | 22.7 ms | 27.0 ms | 28.0 ms | 0.96x |
+| `cpp.table_640x480` | 52.8 ms | 58.0 ms | 61.9 ms | 64.5 ms | 0.96x |
+| `py.table_640x480` | 89.0 ms | 86.9 ms | 232.3 ms | 107.2 ms | 2.17x |
+| `cpp.table_848x480` | 78.9 ms | 78.9 ms | 87.0 ms | 91.9 ms | 0.95x |
+| `py.table_848x480` | 126.9 ms | 124.2 ms | 277.7 ms | 158.8 ms | 1.75x |
+| `cpp.table_1280x720` | 180.7 ms | 180.6 ms | 204.0 ms | 207.2 ms | 0.98x |
+| `py.table_1280x720` | 289.0 ms | 294.8 ms | 383.7 ms | 388.4 ms | 0.99x |
+
+The first run of this experiment shared the box with another workload at a load
+average of 2 to 3.5; the published run had it to itself. p50 barely noticed,
+moving between 0.91x and 1.02x, and the direction is not even consistent, so a
+few percent of that is ordinary run-to-run variation rather than the neighbour.
+p99 noticed a great deal: `py.table_640x480` reported 232 ms under load against
+107 ms quiet, an inflation of 2.17x, and it would have been published as a
+language result. That is the whole of this threat, measured on this machine:
+**the median is a property of the pipeline and the tail is partly a property of
+the box.** Every figure in `RESULTS.md` comes from the quiet run.
 
 ## T3. ROS 2 is absent from this machine, so the transport is not measured here
 
@@ -391,7 +469,26 @@ be using several cores where Eigen's single-threaded kernels use one, and the
 comparison would be between one core and four. That is checkable rather than
 arguable, so it was checked:
 
-@@BLAS_THREADS@@
+| run | cores used | wall p50 | CPU seconds for the same work |
+|---|---:|---:|---:|
+| C++, Eigen, no OpenMP | 0.99 | 52.8 ms | 26 s |
+| Python, BLAS threads unset | 3.87 | 82.0 ms | 152 s |
+| Python, `OPENBLAS_NUM_THREADS=1` | 1.00 | 89.4 ms | 41 s |
+
+OpenBLAS does thread: the Python process ran at 3.87 cores against C++'s 0.99.
+What it does not do is convert that into latency. Pinning it to one thread
+costs 9% of wall-clock p50 (89.4 ms against 82.0 ms) and saves 111 CPU seconds
+out of 152 over the same 400 frames. The matrices here are too small for four
+threads to beat their own synchronisation, so most of those cores are spinning.
+
+Two consequences, and they point in opposite directions. The latency ratio in
+`RESULTS.md` is **not** an artefact of Python being handed more cores: the
+`py1t` row is within a few percent of the `py` row, so the comparison survives
+being made per core. But the *cost* ratio is far worse than the latency ratio,
+and on a four-core robot controller running a planner and a driver alongside
+the perception node, burning 3.9 cores to save 9% of one node's latency is the
+wrong trade. A deployment should set `OPENBLAS_NUM_THREADS=1` and take the
+`py1t` number.
 
 ## T5. The corpus is graspable on 100% of frames by construction
 
@@ -418,7 +515,8 @@ in closed form, then applying an axial noise model
 gives exact ground truth and byte-reproducibility, which a rasteriser could not
 on a machine with no GPU.
 
-What it does not give is a real sensor. There is no multipath, no interreflection,
+What it does not give is a real sensor. There is no multipath, no
+interreflection,
 no flying-pixel artefact at depth discontinuities, no exposure-dependent noise
 floor, no per-unit calibration error, no rolling shutter and no temporal
 correlation between frames. Real structured-light and time-of-flight depth is
@@ -460,7 +558,7 @@ times, sleep behaviour and scheduler noise are identical. The cost is that the
 C++ pipeline is entered through a `ctypes` call rather than from a C++ loop.
 The pipeline's own instrumentation is inside the call, so the reported
 `compute` latency excludes the transition; the `response` latency includes it.
-At @@CTYPES_NS@@ ns per call against a C++ frame of milliseconds this is far
+At 370 ns per call against a C++ frame of milliseconds this is far
 below the resolution of any conclusion drawn from it, but it is a difference
 between how the two implementations are reached and it is not zero.
 

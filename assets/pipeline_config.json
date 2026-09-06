@@ -2,13 +2,14 @@
   "_comment": "Single source of truth for both implementations. Neither the C++ nor the Python pipeline may hard-code any value that appears here; tests/test_config_is_sole_source.py enforces it.",
 
   "camera": {
-    "_comment": "Fixed eye-to-hand RGB-D camera above the table, tilted down. Intrinsics are for the reference 640x480 stream and are rescaled with resolution.",
+    "_comment": "Fixed eye-to-hand RGB-D camera above the table, looking down. The four intrinsics below describe the reference 640x480 stream; docs/ALGORITHM.md S1 gives the rule that carries them to another sensor mode.",
     "reference_width": 640,
     "reference_height": 480,
     "fx": 615.0,
     "fy": 615.0,
     "cx": 319.5,
     "cy": 239.5,
+    "intrinsics_note": "Square pixels, so fx == fy, and the principal point is the image centre: (640-1)/2 = 319.5, (480-1)/2 = 239.5. A different sensor mode is the same optics reading a different window of the same array, so the focal length in pixels tracks the vertical resolution only (fx = fy = fy_ref * H / reference_height) and the principal point is recentred on the new image. Scaling all four by W / reference_width instead would claim a wider mode stretches the image, and would put cy at 317.34 on the 480-row 848x480 stream, which no sensor reports. The rule is the identity at the reference resolution, which is why these four values are what they are.",
     "depth_scale_m": 0.001,
     "T_base_cam": [
       0.0, -1.0,  0.0,   0.30,

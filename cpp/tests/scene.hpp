@@ -41,12 +41,13 @@ inline Scene render_box_on_table(const grasp_core::Config & config, int width, i
   scene.box_half_y = 0.035;
   scene.box_height = 0.05;
 
-  const double scale = static_cast<double>(width) /
-    static_cast<double>(config.camera.reference_width);
-  const double fx = config.camera.fx * scale;
-  const double fy = config.camera.fy * scale;
-  const double cx = config.camera.cx * scale;
-  const double cy = config.camera.cy * scale;
+  // The same rule the pipeline applies (ALGORITHM.md S1), so the fixture
+  // cannot drift from the intrinsics the code under test deprojects with.
+  const double fx = config.camera.fy * static_cast<double>(height) /
+    static_cast<double>(config.camera.reference_height);
+  const double fy = fx;
+  const double cx = (static_cast<double>(width) - 1.0) / 2.0;
+  const double cy = (static_cast<double>(height) - 1.0) / 2.0;
 
   // p_base = R * p_cam + t, with R and t straight out of the config, so the
   // fixture cannot drift from the transform the pipeline applies.

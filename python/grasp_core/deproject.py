@@ -20,17 +20,16 @@ import numpy as np
 class Deprojector:
     """S1: depth image to `points_cam`, in row-major pixel order."""
 
-    __slots__ = ('_stride', '_z_min', '_z_max', '_depth_scale', '_ref_width',
-                 '_fx0', '_fy0', '_cx0', '_cy0', '_shape', 'fx', 'fy', 'cx', 'cy',
+    __slots__ = ('_stride', '_z_min', '_z_max', '_depth_scale', '_ref_height',
+                 '_f0', '_shape', 'fx', 'fy', 'cx', 'cy',
                  '_u_minus_cx', '_v_minus_cy', '_z', '_lo', '_hi', '_scratch',
                  '_work', '_points')
 
     def __init__(self, camera: dict, deproject: dict):
-        self._ref_width = camera['reference_width']
-        self._fx0 = camera['fx']
-        self._fy0 = camera['fy']
-        self._cx0 = camera['cx']
-        self._cy0 = camera['cy']
+        # Square pixels, so one focal length, and it is the vertical one
+        # because that is the axis the sensor mode does not crop. See S1.
+        self._ref_height = camera['reference_height']
+        self._f0 = camera['fy']
         self._depth_scale = camera['depth_scale_m']
         self._stride = deproject['stride']
         self._z_min = deproject['z_min_m']
@@ -42,11 +41,12 @@ class Deprojector:
         stride = self._stride
         rows = (height + stride - 1) // stride
         cols = (width + stride - 1) // stride
-        scale = width / self._ref_width
-        self.fx = self._fx0 * scale
-        self.fy = self._fy0 * scale
-        self.cx = self._cx0 * scale
-        self.cy = self._cy0 * scale
+        # ALGORITHM.md S1: the focal length in pixels tracks the vertical
+        # resolution and the principal point is the centre of the image that
+        # actually arrives. At the reference resolution this is the identity.
+        self.fx = self.fy = self._f0 * height / self._ref_height
+        self.cx = (width - 1) / 2
+        self.cy = (height - 1) / 2
 
         self._u_minus_cx = np.arange(0, width, stride, dtype=np.float64) - self.cx
         self._v_minus_cy = np.arange(0, height, stride, dtype=np.float64) - self.cy

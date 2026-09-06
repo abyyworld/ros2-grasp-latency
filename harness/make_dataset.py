@@ -63,9 +63,13 @@ class Camera:
 
 def make_camera(cfg: dict, width: int, height: int) -> Camera:
     cam = cfg["camera"]
-    scale = width / cam["reference_width"]
-    fx, fy = cam["fx"] * scale, cam["fy"] * scale
-    cx, cy = cam["cx"] * scale, cam["cy"] * scale
+    # docs/ALGORITHM.md S1, and it has to be the identical rule: the renderer
+    # casts the rays that both pipelines will deproject back, so an intrinsics
+    # model that differs here puts every point in the wrong place and no test
+    # downstream can see it, because both pipelines would be wrong together.
+    fx = fy = cam["fy"] * height / cam["reference_height"]
+    cx = (width - 1) / 2
+    cy = (height - 1) / 2
 
     T = np.asarray(cam["T_base_cam"], dtype=np.float64).reshape(4, 4)
     R, t = T[:3, :3], T[:3, 3]

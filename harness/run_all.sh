@@ -124,7 +124,12 @@ done
 # about the language. One extra pass on the reference corpus with the BLAS
 # pinned to a single thread separates the two questions, and the gate then
 # checks that pinning it did not change the answer.
-if [ "${SKIP_ONE_THREAD:-0}" = "1" ]; then
+reference_benchmarked=0
+for entry in $DATASETS; do
+  [ "${entry%%:*}" = "$REFERENCE" ] && reference_benchmarked=1
+done
+# Nothing to pin against if the reference corpus was not benchmarked.
+if [ "${SKIP_ONE_THREAD:-0}" = "1" ] || [ "$reference_benchmarked" = "0" ]; then
   printf '    single-BLAS-thread pass skipped\n' >&2
 else
   printf '\n    --- %s, BLAS pinned to one thread ---\n' "$REFERENCE" >&2

@@ -79,9 +79,10 @@ struct Pipeline::Impl
   Eigen::Vector3d translation{Eigen::Vector3d::Zero()};
   Eigen::Vector2d y_reference{Eigen::Vector2d::Zero()};
 
-  // Intrinsics for the reserved resolution, rescaled from the reference
-  // stream. Recomputed on reserve() rather than per frame: a division that
-  // never changes has no business inside a measured stage.
+  // Intrinsics for the reserved resolution, derived from the reference stream
+  // by the rule in ALGORITHM.md S1. Recomputed on reserve() rather than per
+  // frame: a division that never changes has no business inside a measured
+  // stage.
   double fx{0.0}, fy{0.0}, cx{0.0}, cy{0.0};
   int reserved_width{0};
   int reserved_height{0};
@@ -118,12 +119,16 @@ void Pipeline::Impl::reserve(int width, int height)
   plane.reserve(max_points);
   cluster.reserve(max_points);
 
-  const double scale = static_cast<double>(width) /
-    static_cast<double>(config.camera.reference_width);
-  fx = config.camera.fx * scale;
-  fy = config.camera.fy * scale;
-  cx = config.camera.cx * scale;
-  cy = config.camera.cy * scale;
+  // ALGORITHM.md S1: square pixels, so one focal length, and it tracks the
+  // vertical resolution because a wider sensor mode is a wider field of view
+  // at the same focal length rather than a stretched image. The principal
+  // point is the centre of the image that arrives. Written in this order
+  // rather than folded into a scale factor so it rounds the same way as the
+  // Python, which the 1e-6 equivalence gate is tight enough to notice.
+  fx = fy = config.camera.fy * static_cast<double>(height) /
+    static_cast<double>(config.camera.reference_height);
+  cx = (static_cast<double>(width) - 1.0) / 2.0;
+  cy = (static_cast<double>(height) - 1.0) / 2.0;
 
   reserved_width = width;
   reserved_height = height;
