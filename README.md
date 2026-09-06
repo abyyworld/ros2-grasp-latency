@@ -44,6 +44,50 @@ single large matrix product, because NumPy issues 128 RANSAC candidates against
 the same arithmetic. That stage is 97 percent of the C++ frame, so it decides
 the total and everything else is rounding.
 
+## In a real ROS 2 node, the answer reverses
+
+Everything above measures the pipeline called directly, in one process. That is
+the honest way to isolate the language, and it is not how anybody ships a grasp
+node. Put the same two cores behind rclcpp and rclpy, drive them from a live
+publisher at 30 Hz over Fast DDS, and the conclusion inverts.
+
+Measured in the Docker image on an Apple M-series host, 2100 frames published
+per arm at 640x480:
+
+| node | frames processed | dropped | compute p50 | end to end p50 | end to end p99 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| rclcpp, own process | 1869 / 2100 | 11% | 25.6 ms | 26.0 ms | 29.5 ms |
+| rclcpp, composed | 2100 / 2100 | **0%** | 25.4 ms | 25.5 ms | 33.5 ms |
+| rclcpp, composed, intra-process | 2100 / 2100 | **0%** | 26.3 ms | 26.3 ms | 35.1 ms |
+| **rclpy, own process** | **405 / 2100** | **81%** | **163.3 ms** | **314.6 ms** | **1002 ms** |
+
+**The Python node drops four frames in five and its p99 end-to-end latency is a
+full second.** Not because the algorithm changed: it is the same `grasp_core`
+the in-process benchmark ran, computing the same answer. The per-stage ratios
+move from parity to 6.1x on the plane stage and 84x on IK, and the node falls
+far enough behind that the QoS queue discards most of the stream. A 30 Hz
+control loop written this way does not run at 30 Hz. It runs at about 6 Hz and
+loses the rest.
+
+**Intra-process comms did not help.** Zero copy removes the serialisation of a
+614 kB depth image per frame, and the composed node still measured 26.3 ms
+against 25.4 ms without it: slightly worse, and inside the noise. The frame was
+never transport bound, so removing the copy bought nothing. That is a negative
+result for the optimisation most often reached for first.
+
+**These absolutes are not comparable with the in-process table above.** They
+are different machines: the in-process runs are on a shared x86 vCPU, these are
+in a container on Apple Silicon. Within each table both implementations share
+one machine, so each ratio is sound, but the two tables are not comparable to
+each other.
+
+One thing that difference exposes is worth more than either table. Python's
+plane stage is 34 ms in the x86 run and 144 ms here, while the C++ one got
+*faster*, 46 ms to 24 ms. The in-process parity depended on NumPy reaching a
+well-tuned BLAS, and the container's stock arm64 NumPy evidently does not
+reach one. **Python's advantage on that stage is a property of the BLAS it
+happens to link, not of the language, and it does not travel.**
+
 The transferable claim is therefore not a ratio. It is this: **the language
 gap is a property of how much of your frame is one large array operation.** The
 workload sweep below measures that directly, and the ratio moves from 0.7x to

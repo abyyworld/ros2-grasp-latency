@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "generated_at_utc": "2026-09-06T18:01:26Z",
-    "git_revision": "5c07b561787c55b07823adfee88578fdfaaad9f7",
+    "generated_at_utc": "2026-09-06T23:00:07Z",
+    "git_revision": "27a1846ea536fc508b99d10bd6ac5ef71a8a6e19",
     "toolchain_declared": {
       "OS": "Ubuntu 24.04.4 LTS",
       "Kernel": "Linux 6.18.44",
@@ -21,9 +21,9 @@
       "numpy": "2.4.6",
       "cpu_count": 4,
       "load_average": [
-        1.56689453125,
-        2.45263671875,
-        1.6884765625
+        0.00830078125,
+        0.01513671875,
+        0.0
       ],
       "blas_threads": {
         "OPENBLAS_NUM_THREADS": null,
@@ -56,7 +56,11 @@
       "results/py.table_320x240.timing.jsonl",
       "results/py.table_640x480.timing.jsonl",
       "results/py.table_848x480.timing.jsonl",
-      "results/py1t.table_640x480.timing.jsonl"
+      "results/py1t.table_640x480.timing.jsonl",
+      "results/ros2_composed_cpp.timing.jsonl",
+      "results/ros2_composed_ipc_cpp.timing.jsonl",
+      "results/ros2_cpp.timing.jsonl",
+      "results/ros2_py.timing.jsonl"
     ]
   },
   "groups": [
@@ -442,6 +446,390 @@
         "confidence": 0.95,
         "resamples": 2000,
         "standard_error": 411289.98535717995
+      }
+    },
+    {
+      "impl": "cpp",
+      "dataset": "table_640x480",
+      "transport": "ros2",
+      "width": 640,
+      "height": 480,
+      "pixels": 307200,
+      "samples": 1769,
+      "distinct_frames": 100,
+      "timer_overhead_ns": null,
+      "total_ns": {
+        "p50": 25612346.0,
+        "p90": 27154921.0,
+        "p95": 27621841.0,
+        "p99": 28880938.0,
+        "p99.9": 34359286.0,
+        "max": 41620303.0,
+        "mean": 25655678.285472017,
+        "n": 1769
+      },
+      "stage_ns": {
+        "decode": {
+          "p50": 127.0,
+          "p90": 209.0,
+          "p95": 211.0,
+          "p99": 212.0,
+          "p99.9": 294.0,
+          "max": 28124.0,
+          "mean": 151.09666478236292,
+          "n": 1769
+        },
+        "deproject": {
+          "p50": 847199.0,
+          "p90": 907756.0,
+          "p95": 939132.0,
+          "p99": 1104008.0,
+          "p99.9": 1330184.0,
+          "max": 5458607.0,
+          "mean": 861844.1243640474,
+          "n": 1769
+        },
+        "transform_crop": {
+          "p50": 1039750.0,
+          "p90": 1125429.0,
+          "p95": 1167290.0,
+          "p99": 1296102.0,
+          "p99.9": 1481333.0,
+          "max": 1773435.0,
+          "mean": 1056144.6902204636,
+          "n": 1769
+        },
+        "plane": {
+          "p50": 23629840.0,
+          "p90": 25174549.0,
+          "p95": 25624090.0,
+          "p99": 26456939.0,
+          "p99.9": 31792286.0,
+          "max": 39649307.0,
+          "mean": 23661459.20067835,
+          "n": 1769
+        },
+        "cluster": {
+          "p50": 46079.0,
+          "p90": 77733.0,
+          "p95": 85850.0,
+          "p99": 120052.0,
+          "p99.9": 199406.0,
+          "max": 217267.0,
+          "mean": 47137.6416054268,
+          "n": 1769
+        },
+        "grasp": {
+          "p50": 11623.0,
+          "p90": 18143.0,
+          "p95": 19631.0,
+          "p99": 33072.0,
+          "p99.9": 44457.0,
+          "max": 52068.0,
+          "mean": 12150.904465799887,
+          "n": 1769
+        },
+        "ik": {
+          "p50": 9773.0,
+          "p90": 17595.0,
+          "p95": 22265.0,
+          "p99": 34936.0,
+          "p99.9": 45400.0,
+          "max": 55401.0,
+          "mean": 11881.88072357264,
+          "n": 1769
+        },
+        "traj": {
+          "p50": 509.0,
+          "p90": 1821.0,
+          "p95": 2122.0,
+          "p99": 2516.0,
+          "p99.9": 7915.0,
+          "max": 30060.0,
+          "mean": 815.6026003391747,
+          "n": 1769
+        }
+      },
+      "over_budget_fraction": 0.0022611644997173543,
+      "bail_outs": {
+        "plane_not_found": 0,
+        "not_graspable": 0,
+        "ik_not_converged": 0
+      },
+      "ik_iterations": {
+        "median": 9.0,
+        "max": 36
+      },
+      "points_median": 212529.0,
+      "p99_ci_iid": {
+        "low": 28255533.0,
+        "high": 29426477.0,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 386642.72042757075
+      },
+      "p99_ci_by_frame": {
+        "low": 28215423.0,
+        "high": 29426477.0,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 400069.1709281631
+      }
+    },
+    {
+      "impl": "cpp",
+      "dataset": "table_640x480",
+      "transport": "ros2_composed",
+      "width": 640,
+      "height": 480,
+      "pixels": 307200,
+      "samples": 2000,
+      "distinct_frames": 100,
+      "timer_overhead_ns": null,
+      "total_ns": {
+        "p50": 25350103.0,
+        "p90": 27563053.0,
+        "p95": 28377741.0,
+        "p99": 33350055.0,
+        "p99.9": 47859419.0,
+        "max": 74396625.0,
+        "mean": 25676723.2455,
+        "n": 2000
+      },
+      "stage_ns": {
+        "decode": {
+          "p50": 127.0,
+          "p90": 170.0,
+          "p95": 210.0,
+          "p99": 213.0,
+          "p99.9": 297.0,
+          "max": 39115.0,
+          "mean": 152.4775,
+          "n": 2000
+        },
+        "deproject": {
+          "p50": 855107.0,
+          "p90": 931792.0,
+          "p95": 993987.0,
+          "p99": 1140694.0,
+          "p99.9": 4077935.0,
+          "max": 9828428.0,
+          "mean": 882113.553,
+          "n": 2000
+        },
+        "transform_crop": {
+          "p50": 1037757.0,
+          "p90": 1138143.0,
+          "p95": 1206518.0,
+          "p99": 1350250.0,
+          "p99.9": 2147652.0,
+          "max": 2593789.0,
+          "mean": 1058243.222,
+          "n": 2000
+        },
+        "plane": {
+          "p50": 23362390.0,
+          "p90": 25537891.0,
+          "p95": 26257302.0,
+          "p99": 30964358.0,
+          "p99.9": 45903874.0,
+          "max": 71618741.0,
+          "mean": 23658817.9105,
+          "n": 2000
+        },
+        "cluster": {
+          "p50": 46321.0,
+          "p90": 78328.0,
+          "p95": 88507.0,
+          "p99": 120725.0,
+          "p99.9": 266292.0,
+          "max": 635745.0,
+          "mean": 47933.613,
+          "n": 2000
+        },
+        "grasp": {
+          "p50": 11334.0,
+          "p90": 17848.0,
+          "p95": 19662.0,
+          "p99": 32432.0,
+          "p99.9": 45455.0,
+          "max": 60245.0,
+          "mean": 12002.9345,
+          "n": 2000
+        },
+        "ik": {
+          "p50": 9895.0,
+          "p90": 17802.0,
+          "p95": 22245.0,
+          "p99": 38769.0,
+          "p99.9": 68036.0,
+          "max": 84083.0,
+          "mean": 12159.6895,
+          "n": 2000
+        },
+        "traj": {
+          "p50": 463.0,
+          "p90": 1936.0,
+          "p95": 2111.0,
+          "p99": 2491.0,
+          "p99.9": 7713.0,
+          "max": 30857.0,
+          "mean": 830.492,
+          "n": 2000
+        }
+      },
+      "over_budget_fraction": 0.0105,
+      "bail_outs": {
+        "plane_not_found": 0,
+        "not_graspable": 0,
+        "ik_not_converged": 0
+      },
+      "ik_iterations": {
+        "median": 9.0,
+        "max": 36
+      },
+      "points_median": 212574.5,
+      "p99_ci_iid": {
+        "low": 31858654.0,
+        "high": 36059785.0,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 1076949.9263514436
+      },
+      "p99_ci_by_frame": {
+        "low": 32041700.0,
+        "high": 35888518.44999997,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 972948.2223895777
+      }
+    },
+    {
+      "impl": "cpp",
+      "dataset": "table_640x480",
+      "transport": "ros2_composed_ipc",
+      "width": 640,
+      "height": 480,
+      "pixels": 307200,
+      "samples": 2000,
+      "distinct_frames": 100,
+      "timer_overhead_ns": null,
+      "total_ns": {
+        "p50": 26255116.0,
+        "p90": 28406172.0,
+        "p95": 29390746.0,
+        "p99": 35034307.0,
+        "p99.9": 47143237.0,
+        "max": 58426618.0,
+        "mean": 26469377.268,
+        "n": 2000
+      },
+      "stage_ns": {
+        "decode": {
+          "p50": 127.0,
+          "p90": 171.0,
+          "p95": 211.0,
+          "p99": 254.0,
+          "p99.9": 428.0,
+          "max": 34389.0,
+          "mean": 159.899,
+          "n": 2000
+        },
+        "deproject": {
+          "p50": 862786.0,
+          "p90": 984320.0,
+          "p95": 1057244.0,
+          "p99": 1260764.0,
+          "p99.9": 2567977.0,
+          "max": 6762907.0,
+          "mean": 894564.735,
+          "n": 2000
+        },
+        "transform_crop": {
+          "p50": 1049884.0,
+          "p90": 1191921.0,
+          "p95": 1275436.0,
+          "p99": 1480725.0,
+          "p99.9": 1843115.0,
+          "max": 2793464.0,
+          "mean": 1077295.4735,
+          "n": 2000
+        },
+        "plane": {
+          "p50": 24222300.0,
+          "p90": 26296663.0,
+          "p95": 27195441.0,
+          "p99": 32692316.0,
+          "p99.9": 45100548.0,
+          "max": 55987526.0,
+          "mean": 24415733.3865,
+          "n": 2000
+        },
+        "cluster": {
+          "p50": 47681.0,
+          "p90": 84292.0,
+          "p95": 93133.0,
+          "p99": 124031.0,
+          "p99.9": 250233.0,
+          "max": 319135.0,
+          "mean": 50085.9185,
+          "n": 2000
+        },
+        "grasp": {
+          "p50": 11802.0,
+          "p90": 18702.0,
+          "p95": 20271.0,
+          "p99": 34161.0,
+          "p99.9": 81486.0,
+          "max": 139361.0,
+          "mean": 12579.062,
+          "n": 2000
+        },
+        "ik": {
+          "p50": 10655.0,
+          "p90": 18984.0,
+          "p95": 23142.0,
+          "p99": 37193.0,
+          "p99.9": 59847.0,
+          "max": 76940.0,
+          "mean": 12942.403,
+          "n": 2000
+        },
+        "traj": {
+          "p50": 514.0,
+          "p90": 2013.0,
+          "p95": 2184.0,
+          "p99": 2585.0,
+          "p99.9": 7878.0,
+          "max": 36342.0,
+          "mean": 936.5205,
+          "n": 2000
+        }
+      },
+      "over_budget_fraction": 0.0135,
+      "bail_outs": {
+        "plane_not_found": 0,
+        "not_graspable": 0,
+        "ik_not_converged": 0
+      },
+      "ik_iterations": {
+        "median": 9.0,
+        "max": 36
+      },
+      "points_median": 212574.5,
+      "p99_ci_iid": {
+        "low": 32707202.0,
+        "high": 36550715.0,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 1067614.4312511082
+      },
+      "p99_ci_by_frame": {
+        "low": 32668087.0,
+        "high": 36356263.0,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 1013467.7506345625
       }
     },
     {
@@ -958,6 +1346,134 @@
     },
     {
       "impl": "py",
+      "dataset": "table_640x480",
+      "transport": "ros2",
+      "width": 640,
+      "height": 480,
+      "pixels": 307200,
+      "samples": 305,
+      "distinct_frames": 100,
+      "timer_overhead_ns": null,
+      "total_ns": {
+        "p50": 163329618.0,
+        "p90": 193053873.0,
+        "p95": 205177809.0,
+        "p99": 221039443.0,
+        "p99.9": 260396150.0,
+        "max": 260396150.0,
+        "mean": 166076890.52786887,
+        "n": 305
+      },
+      "stage_ns": {
+        "decode": {
+          "p50": 3012.0,
+          "p90": 4081.0,
+          "p95": 4425.0,
+          "p99": 6566.0,
+          "p99.9": 12211.0,
+          "max": 12211.0,
+          "mean": 3092.1803278688526,
+          "n": 305
+        },
+        "deproject": {
+          "p50": 8097496.0,
+          "p90": 10323453.0,
+          "p95": 11674376.0,
+          "p99": 12406853.0,
+          "p99.9": 16814099.0,
+          "max": 16814099.0,
+          "mean": 8417719.967213115,
+          "n": 305
+        },
+        "transform_crop": {
+          "p50": 8499527.0,
+          "p90": 10875111.0,
+          "p95": 11785702.0,
+          "p99": 14019627.0,
+          "p99.9": 17442354.0,
+          "max": 17442354.0,
+          "mean": 8775951.036065573,
+          "n": 305
+        },
+        "plane": {
+          "p50": 144214534.0,
+          "p90": 170335918.0,
+          "p95": 180440460.0,
+          "p99": 195176952.0,
+          "p99.9": 238824153.0,
+          "max": 238824153.0,
+          "mean": 146903948.84590164,
+          "n": 305
+        },
+        "cluster": {
+          "p50": 487165.0,
+          "p90": 769136.0,
+          "p95": 889445.0,
+          "p99": 1573099.0,
+          "p99.9": 2709900.0,
+          "max": 2709900.0,
+          "mean": 528933.6885245901,
+          "n": 305
+        },
+        "grasp": {
+          "p50": 308841.0,
+          "p90": 433552.0,
+          "p95": 498036.0,
+          "p99": 904471.0,
+          "p99.9": 1642216.0,
+          "max": 1642216.0,
+          "mean": 328237.86229508196,
+          "n": 305
+        },
+        "ik": {
+          "p50": 818440.0,
+          "p90": 1374871.0,
+          "p95": 1700862.0,
+          "p99": 2741068.0,
+          "p99.9": 3903403.0,
+          "max": 3903403.0,
+          "mean": 939247.9901639344,
+          "n": 305
+        },
+        "traj": {
+          "p50": 37917.0,
+          "p90": 65423.0,
+          "p95": 80442.0,
+          "p99": 119029.0,
+          "p99.9": 1460634.0,
+          "max": 1460634.0,
+          "mean": 48956.983606557376,
+          "n": 305
+        }
+      },
+      "over_budget_fraction": 1.0,
+      "bail_outs": {
+        "plane_not_found": 0,
+        "not_graspable": 0,
+        "ik_not_converged": 0
+      },
+      "ik_iterations": {
+        "median": 9.0,
+        "max": 36
+      },
+      "points_median": 212529.0,
+      "p99_ci_iid": {
+        "low": 211608156.0,
+        "high": 235244694.0,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 7615282.579396666
+      },
+      "p99_ci_by_frame": {
+        "low": 211608156.0,
+        "high": 235244694.0,
+        "confidence": 0.95,
+        "resamples": 2000,
+        "standard_error": 7724336.912100513
+      }
+    },
+    {
+      "impl": "py",
       "dataset": "table_848x480",
       "transport": "inproc",
       "width": 848,
@@ -1282,6 +1798,28 @@
     },
     {
       "impl": "py",
+      "dataset": "table_640x480",
+      "transport": "ros2",
+      "pixels": 307200,
+      "total": {
+        "p50": 6.376987801117477,
+        "p99": 7.653471746658644,
+        "mean": 6.473299543279386,
+        "max": 6.256469348625357
+      },
+      "stages": {
+        "decode": 23.716535433070867,
+        "deproject": 9.557962178897757,
+        "transform_crop": 8.17458716037509,
+        "plane": 6.103068577696675,
+        "cluster": 10.572386553527638,
+        "grasp": 26.571539189537987,
+        "ik": 83.74501176711348,
+        "traj": 74.49312377210217
+      }
+    },
+    {
+      "impl": "py",
       "dataset": "table_848x480",
       "transport": "inproc",
       "pixels": 407040,
@@ -1370,24 +1908,24 @@
     },
     "py/table_640x480": {
       "collections_over_run": {
-        "gen0": 1,
+        "gen0": 0,
         "gen1": 0,
         "gen2": 0
       },
-      "frames_analysed": 1999,
-      "frames_with_collection": 1,
-      "collection_frame_share": 0.0005002501250625312,
+      "frames_analysed": 304,
+      "frames_with_collection": 0,
+      "collection_frame_share": 0.0,
       "tail_percentile": 99.0,
-      "tail_threshold_ns": 60298671.0,
-      "tail_frames": 21,
+      "tail_threshold_ns": 221039443.0,
+      "tail_frames": 4,
       "tail_frames_with_collection": 0,
       "tail_collection_share": 0.0,
-      "point_biserial_r": -0.019648460555480696,
-      "p99_all_ns": 60298671.0,
-      "p99_without_collection_ns": 60298671.0,
-      "median_with_collection_ns": 43316397.0,
-      "median_without_collection_ns": 47206278.0,
-      "verdict": "removing collection frames moves p99 by 0.0%, and collections are no more common in the tail (0.0%) than overall (0.1%): the tail is not the collector"
+      "point_biserial_r": null,
+      "p99_all_ns": 221039443.0,
+      "p99_without_collection_ns": 221039443.0,
+      "median_with_collection_ns": null,
+      "median_without_collection_ns": 163429638.5,
+      "verdict": "the collector never ran during a measured frame, so it explains none of the tail"
     },
     "py/table_848x480": {
       "collections_over_run": {
