@@ -85,6 +85,19 @@ jobs:
           path: /tmp/*.jsonl
           if-no-files-found: warn
 
+  # The Dockerfile was written but never executed for most of this project's
+  # life, and the first real `docker build` found a broken COPY that colcon
+  # could not have caught. Building the image is now part of CI.
+  docker:
+    name: docker build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t grasp-latency -f docker/Dockerfile .
+      - name: The benchmark script parses and its help works
+        run: |
+          docker run --rm grasp-latency bash -c 'bash -n docker/run_ros_benchmark.sh'
+
   ros2:
     name: colcon build (ROS 2 Jazzy)
     runs-on: ubuntu-24.04

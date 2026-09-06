@@ -216,10 +216,50 @@ wait_for_lifecycle() {
   return 1
 }
 
+# A launch that will not stop must not stop the run. `ros2 launch` forwards
+# SIGINT to its children and then waits for them, and a lifecycle node that
+# declines to leave the active state leaves it waiting forever: the first real
+# execution of this script hung here, after the driver had already published
+# all 2100 frames and the recording was complete. A bare `wait` therefore
+# blocks on a node that logs "ctrl-c ... ignoring", and the recorded data that
+# was already on disk never reaches the conversion step.
+#
+# So escalate on a clock rather than trusting the node, and say which signal it
+# took: a run that needed SIGKILL is still a valid measurement of the pipeline,
+# but it is not a clean shutdown and the reader should know.
 stop() {
-  local pid="$1"
+  local pid="$1" waited=0
+
   kill -INT "${pid}" 2>/dev/null || true
+  while (( waited < 15 )) && kill -0 "${pid}" 2>/dev/null; do
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    echo "  pid ${pid} ignored SIGINT for ${waited}s, escalating to SIGTERM" >&2
+    kill -TERM "${pid}" 2>/dev/null || true
+    waited=0
+    while (( waited < 10 )) && kill -0 "${pid}" 2>/dev/null; do
+      sleep 1
+      waited=$(( waited + 1 ))
+    done
+  fi
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    echo "  pid ${pid} ignored SIGTERM too, sending SIGKILL" >&2
+    kill -KILL "${pid}" 2>/dev/null || true
+  fi
+
   wait "${pid}" 2>/dev/null || true
+
+  # `ros2 launch` is a supervisor: killing it can orphan the nodes it started,
+  # and an orphaned node keeps its DDS participant and its topic alive, so the
+  # next mode would discover a stale publisher and measure two nodes at once.
+  pkill -KILL -f "grasp_node" 2>/dev/null || true
+  pkill -KILL -f "frame_publisher" 2>/dev/null || true
+  pkill -KILL -f "rosbag2_recorder" 2>/dev/null || true
+  sleep 1
 }
 
 settle() {
