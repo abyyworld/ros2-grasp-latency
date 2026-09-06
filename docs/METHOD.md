@@ -74,21 +74,21 @@ as `timer_overhead_ns`:
 
 | Implementation | Median cost of one clock read | Nine reads per frame |
 |---|---|---|
-| C++ | 21 ns | 189 ns |
-| Python | 184 ns | 1656 ns |
+| C++ | <!--@TIMER_CPP-->21<!--/TIMER_CPP--> ns | <!--@TIMER_CPP9-->189<!--/TIMER_CPP9--> ns |
+| Python | <!--@TIMER_PY-->184<!--/TIMER_PY--> ns | <!--@TIMER_PY9-->1,656<!--/TIMER_PY9--> ns |
 
 **The overhead is reported and not subtracted.** Two reasons. It is far below
 the resolution of anything being compared: the instrumentation floor is
-1656 ns against a Python frame of tens of milliseconds, which is
-0.002% of it. And subtracting an estimate from a measurement makes
+<!--@TIMER_PY9-->1,656<!--/TIMER_PY9--> ns against a Python frame of tens of milliseconds, which is
+<!--@TIMER_PY_SHARE-->0.0019%<!--/TIMER_PY_SHARE--> of it. And subtracting an estimate from a measurement makes
 the measurement depend on the quality of the estimate, which is a worse
 property than being a known amount too large. A reader who wants it removed has
 the number in every record.
 
 It is worth naming that the Python clock read costs about
-9 times the C++ one, and that this difference is charged to
+<!--@TIMER_RATIO-->8.8<!--/TIMER_RATIO--> times the C++ one, and that this difference is charged to
 Python inside Python's own measurement. It is a real cost of instrumenting
-Python code, and at 1.5 microseconds per frame it does not move
+Python code, and at <!--@TIMER_BIAS_US-->1.5<!--/TIMER_BIAS_US--> microseconds per frame it does not move
 any conclusion here. On a pipeline a hundred times faster it would.
 
 ## 3. Warm-up
@@ -239,30 +239,22 @@ occurred. A stated deviation is evidence; "passed" is an assertion, and it
 looks identical whether the true figure is 1e-15 or 9e-7. Measured over every
 corpus in this run:
 
+<!--@EQUIVALENCE_TABLE-->
 | field | values compared | worst absolute deviation |
 |---|---:|---|
 | `plane_found` | 500 | exact, every value |
-| `plane` | 2,000 | 2.5e-14 (unit normal, metres) |
+| `plane` | 2,000 | 2.2e-14 (unit normal, metres) |
 | `graspable` | 500 | exact, every value |
-| `width` | 500 | 1.4e-15 (metres) |
-| `tcp` | 8,000 | 1.4e-13 (metres, direction cosines) |
+| `width` | 500 | 1.7e-15 (metres) |
+| `tcp` | 8,000 | 1.2e-13 (metres, direction cosines) |
 | `converged` | 500 | exact, every value |
 | `iterations` | 500 | exact, every value |
-| `q` | 3,500 | 3.5e-13 (radians) |
-| `duration_s` | 500 | 2.5e-13 (seconds) |
-| `traj_checksum` | 500 | 499 identical, 1 on the rounding grid |
+| `q` | 3,500 | 2.9e-13 (radians) |
+| `duration_s` | 500 | 4.4e-14 (seconds) |
+| `traj_checksum` | 500 | 500 identical |
 
-Over `table_320x240`, `table_640x480`, `table_848x480` and `table_1280x720`,
-plus the single-BLAS-thread pass on `table_640x480`: five comparisons, 500
-frames, tolerance 1e-6.
-
-The one digest difference is `table_848x480` frame 95, and it is the
-boundary-straddle case described above rather than a divergence. Two waypoint
-values on that frame sit 6.7e-15 from a nine-decimal grid boundary while the
-joint solution that generates them agrees to 5.0e-14, which the quintic
-amplifies to at most 1.1e-12 inside a waypoint against a grid half-step of
-5.0e-10: two thousandths of one step. Nothing can hide in that, and the gate
-says so with the numbers rather than either failing or staying quiet.
+Over `table_320x240`, `table_640x480`, the single-BLAS-thread pass on `table_640x480`, `table_848x480` and `table_1280x720`: 5 comparisons, 500 frames, tolerance 1.0e-6. The worst deviation anywhere above is 2.9e-13, in `q`, which is 3.5e6 times inside the tolerance.
+<!--/EQUIVALENCE_TABLE-->
 
 ## 10. The control-rate sweep
 
@@ -288,7 +280,7 @@ The scheduler is not free either. At a rate where nothing is backlogged, the
 difference between `response` and `compute` is the whole of it: waking from
 `time.sleep` a little after the release instant, plus reading the job's result
 out of the worker. Measured at 10 Hz on this machine it is
-0.15 to 0.25 ms per job, dominated by sleep wake-up rather than by
+<!--@SCHED_OVERHEAD-->0.18 to 0.23<!--/SCHED_OVERHEAD--> ms per job, dominated by sleep wake-up rather than by
 anything either implementation does.
 
 **Both implementations run under the same Python scheduler**, so the
@@ -299,7 +291,7 @@ compile flags read out of the CMake build tree so the shim cannot drift from
 the library. The latency attributed to a job is the pipeline's own `total_ns`,
 measured by the same instrumentation as the in-process benchmark, so the
 `ctypes` transition is not inside it. The transition is measured separately and
-recorded in `rate_sweep.json` metadata (370 ns per call on this
+recorded in `rate_sweep.json` metadata (<!--@CTYPES_NS-->383<!--/CTYPES_NS--> ns per call on this
 machine, an upper bound because the calibration loop's own Python overhead is
 inside it), because it does sit between the scheduler's release and the
 pipeline's first instruction and a reader is entitled to know its size.
@@ -315,45 +307,41 @@ than reachable poses drawn at random, seeding every solve from `q_neutral`.
 `results/nullspace_sweep.json`, which is what the table below is generated
 from.
 
+<!--@NULLSPACE_TABLE-->
 | `nullspace_gain` | converged | median iterations | max iterations | worst position error | worst orientation error |
 |---:|---:|---:|---:|---:|---:|
-| 0 | 100 of 100 | 9 | 36 | 0.494 mm | 0.3 mrad |
-| 0.01 | 100 of 100 | 9 | 96 | 0.500 mm | 0.2 mrad |
-| 0.02 | 95 of 100 | 10 | 100 | 0.804 mm | 0.3 mrad |
-| 0.05 | 0 of 100 | 100 | 100 | 1.902 mm | 0.7 mrad |
-| 0.1 | 0 of 100 | 100 | 100 | 2.867 mm | 1.4 mrad |
-| 0.2 | 0 of 100 | 100 | 100 | 5.690 mm | 2.9 mrad |
-| 0.5 | 0 of 100 | 100 | 100 | 13.811 mm | 6.9 mrad |
+| 0 | 100 of 100 | 9 | 36 | 0.4944 mm | 0.31 mrad |
+| 0.01 | 100 of 100 | 9 | 96 | 0.5000 mm | 0.22 mrad |
+| 0.02 | 95 of 100 | 9 | 100 | 0.8044 mm | 0.31 mrad |
+| 0.05 | 0 of 100 | none | 100 | 1.9017 mm | 0.73 mrad |
+| 0.1 | 0 of 100 | none | 100 | 2.8673 mm | 1.45 mrad |
+| 0.2 | 0 of 100 | none | 100 | 5.6896 mm | 2.86 mrad |
+| 0.5 | 0 of 100 | none | 100 | 13.8109 mm | 6.94 mrad |
 
-At gain 0 the solver converges on 100 of 100 targets in a median of 9
-iterations, with a worst-case position error of 0.494 mm. That reproduces the
-two figures `ALGORITHM.md` quotes.
+At `ik.damping` 0.05, the configured value. Errors are measured at whatever pose the solver stopped at, converged or not, because how far off a non-converging configuration parks is the question it raises.
+<!--/NULLSPACE_TABLE-->
 
-Raising the gain buys nothing and costs convergence. The term is `I - J^T (J
-J^T + lambda^2 I)^-1 J`, which is not a null-space projector while `lambda >
-0`, so the posture bias leaks into task space instead of staying in the
-redundant degree of freedom. By gain 0.1 the solver reaches tolerance on 0 of
-100 targets and burns all 100 iterations on every frame.
+<!--@NULLSPACE_PROSE-->
+At gain 0 the solver converges on 100 of 100 targets in a median of 9 iterations, worst case 36, with a worst position error of 0.4944 mm against a tolerance of 0.5 mm. Those are the figures the IK column of `RESULTS.md` is the cost of.
 
-**One correction to `ALGORITHM.md`.** It records that at gain 0.1 the
-orientation error parks at about 198 mrad. That is not what this sweep finds:
-at gain 0.1 the orientation error stays inside 1.4 mrad, comfortably under the
-5 mrad tolerance, and what fails is *position*, with a worst case of 2.87 mm
-against a 0.5 mm tolerance. The likely explanation is that the 198 mrad figure
-predates the S5 wrist fold, which changed which of two equivalent grasp frames
-is demanded and so changed where the solver stalls. The conclusion is unchanged
-and the diagnosis is not, so the number should be corrected rather than
-repeated.
+Raising the gain buys nothing and costs convergence. The term is `I - J^T (J J^T + lambda^2 I)^-1 J`, which is not a null-space projector while `lambda > 0`: it differs from the true projector by `O(lambda^2)`, so the posture bias does not stay in the redundant degree of freedom. It leaks into task space, where it is balanced against the task error rather than driven out of it, and the balance point sits outside the tolerance. The largest gain that still reaches every target at damping 0.05 is 0.01. From gain 0.05 upward it reaches tolerance on none of them and burns all 100 iterations on every frame.
 
-A genuine pseudo-inverse projector does converge, and costs an SVD per
-iteration on a stage that runs every frame. Since every frame is seeded from
-`q_neutral` the solution already sits near the neutral posture, so the term had
-nothing left to buy and the default is 0.
+**What fails is position, not orientation.** At gain 0.1 the orientation error stays inside 1.45 mrad, well under the 5 mrad tolerance, while the position error reaches 2.87 mm against 0.5 mm. An earlier revision of `ALGORITHM.md` and of `ik.nullspace_note` attributed the failure to a 198 mrad orientation error. That figure came from a sweep taken before the S5 wrist fold existed, which changed which of two equivalent grasp frames is demanded and so changed where the solver stalls, and it does not reproduce here. The 0 of 100 result does, and both files now carry the corrected diagnosis.
 
-Reproduce it by writing a copy of `assets/pipeline_config.json` with a
-different `ik.nullspace_gain`, constructing `GraspPipeline` against that copy,
-running the 100 frames of the corpus and comparing `IKSolver.forward(q)`
-against the S5 target pose.
+The damping decides which gains are survivable, which is why this is a grid and not a column. Targets reached, out of 100:
+
+| `damping` \ `nullspace_gain` | 0.5 | 0.2 | 0.1 | 0.05 | 0.02 | 0.01 | 0 |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.05 (configured) | 0 | 0 | 0 | 0 | 95 | 100 | 100 |
+| 0.02 | 0 | 52 | 100 | 99 | 99 | 99 | 99 |
+| 0.01 | 98 | 100 | 100 | 100 | 100 | 100 | 100 |
+| 0.005 | 100 | 100 | 100 | 100 | 100 | 100 | 100 |
+| 0.001 | 100 | 100 | 100 | 100 | 100 | 100 | 100 |
+
+The boundary moves the way the `O(lambda^2)` leak says it should: the less damping, the smaller the projector error and the more posture bias the task can absorb. At damping 0.005 and below, every gain in the sweep reached every target, so the term is not fatal in itself. It is fatal at the damping this pipeline runs. Less damping is not uniformly safer either. At damping 0.02, frame 32 of the store ends up 110.5 mm and 184.5 mrad away with the gain off, and is reached at gain 0.1. That failure is not monotonic in either parameter, which is what a near-singular target looks like when the damping is the only thing regularising the solve.
+
+A genuine pseudo-inverse projector does converge, and costs an SVD per iteration on a stage that runs every frame. Since every frame is seeded from `q_neutral` the solution already sits near the neutral posture, so the term has nothing left to buy and the default is 0. The damping stays at 0.05, the most damped value in the sweep and one of the 4 dampings out of 5 that reach every target with the gain off.
+<!--/NULLSPACE_PROSE-->
 
 ---
 
@@ -563,7 +551,7 @@ times, sleep behaviour and scheduler noise are identical. The cost is that the
 C++ pipeline is entered through a `ctypes` call rather than from a C++ loop.
 The pipeline's own instrumentation is inside the call, so the reported
 `compute` latency excludes the transition; the `response` latency includes it.
-At 370 ns per call against a C++ frame of milliseconds this is far
+At <!--@CTYPES_NS-->383<!--/CTYPES_NS--> ns per call against a C++ frame of milliseconds this is far
 below the resolution of any conclusion drawn from it, but it is a difference
 between how the two implementations are reached and it is not zero.
 

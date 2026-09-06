@@ -49,7 +49,7 @@ CLOCK_READS_PER_FRAME = 9  # one before S0 and one after each of the eight stage
 # config because the config holds the chosen value, not the range it was chosen
 # from, and the document has to say what was actually tried.
 NULLSPACE_DAMPINGS = (0.05, 0.02, 0.01, 0.005, 0.001)
-NULLSPACE_GAINS = (0.1, 0.02, 0.0)
+NULLSPACE_GAINS = (0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.0)
 
 
 # --------------------------------------------------------------------------
@@ -136,13 +136,10 @@ def _by_pixels(path: Path):
 
 
 def significant(value: float, digits: int = 3) -> str:
-    """A number with a fixed number of significant digits and no exponent."""
+    """A number rounded to a fixed count of significant digits."""
     if value == 0:
         return '0'
-    text = f'%.{digits}g' % value
-    if 'e' in text:  # only reached for figures far outside anything here
-        return text
-    return text
+    return f'%.{digits}g' % value
 
 
 def scientific(value: float, digits: int = 1) -> str:
@@ -163,13 +160,9 @@ def thousands(value: int) -> str:
 
 def timer_cpp_ns(src: Sources) -> int:
     """One C++ clock read. Stamped identically into every record of a run."""
-    values = {group['timer_overhead_ns'] for group in src.summary['groups']
-              if group['impl'] == 'cpp'}
-    if not values:
-        raise Missing('summary.json has no C++ run to take a timer figure from')
-    # The calibration runs once per process, so four runs give four estimates
-    # of the same quantity. The reference corpus is the one the document's
-    # other numbers come from, so it is the one quoted.
+    # The calibration runs once per process, so every run carries its own
+    # estimate of the same quantity. The reference corpus is the one the
+    # document's other numbers come from, so it is the one quoted.
     return int(src.group('cpp', src.reference)['timer_overhead_ns'])
 
 
@@ -242,152 +235,289 @@ def sub_sched_overhead(src):
     return f'{significant(low, 2)} to {significant(high, 2)}'
 
 
-# Fields whose agreement is exact or nothing: a boolean, an iteration count or
-# a hex digest either matches or it does not, so a deviation column would print
-# a null for every corpus and say less than one sentence of prose.
-EXACT_FIELDS = ('plane_found', 'graspable', 'converged', 'iterations',
-                'traj_checksum')
-DEVIATION_FIELDS = (('plane', 'plane `(n, d)`'), ('width', '`width`'),
-                    ('tcp', 'TCP pose'), ('q', '`q`'),
-                    ('duration_s', 'duration'))
+# The gate's fields in the order compare_outputs.py reports them, with the
+# unit a deviation in that field is measured in. Booleans and the digest have
+# no unit because they compare exactly or not at all.
+FIELD_UNITS = (
+    ('plane_found', None),
+    ('plane', 'unit normal, metres'),
+    ('graspable', None),
+    ('width', 'metres'),
+    ('tcp', 'metres, direction cosines'),
+    ('converged', None),
+    ('iterations', None),
+    ('q', 'radians'),
+    ('duration_s', 'seconds'),
+    ('traj_checksum', None),
+)
 
 
 def corpus_label(path: Path, report: dict) -> str:
     """`equivalence.table_848x480.json` reads as its corpus, and the
-    single-BLAS-thread pass reads as the pass it is rather than as a corpus."""
+    single-BLAS-thread pass reads as the pass it is rather than as a tag."""
     stem = path.name[len('equivalence.'):-len('.json')]
-    parts = stem.split('.')
-    label = f'`{parts[0]}`'
+    corpus = stem.split('.')[0]
     right = report.get('right', {}).get('impl', 'py')
+    if right == 'py1t':
+        return f'the single-BLAS-thread pass on `{corpus}`'
     if right != 'py':
-        label += f' ({right})'
-    return label
+        return f'`{corpus}` ({right})'
+    return f'`{corpus}`'
 
 
 def sub_equivalence_table(src):
-    rows = []
-    worst_overall = 0.0
+    """One row per field, worst deviation over every corpus in results/.
+
+    Aggregated across the comparisons rather than split by corpus because the
+    claim the gate makes is per field: this is how far apart the two
+    implementations ever got on this quantity, anywhere. The per-corpus and
+    per-frame detail is in the JSON, which is committed.
+    """
+    reports = []
     for path in src.equivalence_files():
         report = load_json(path)
-        fields = report['fields']
-        cells = []
-        for key, _ in DEVIATION_FIELDS:
-            deviation = fields.get(key, {}).get('worst_abs_deviation')
-            cells.append('exact' if deviation in (None, 0)
-                         else scientific(deviation))
-            if deviation:
-                worst_overall = max(worst_overall, deviation)
-        for key in EXACT_FIELDS:
-            if fields.get(key, {}).get('mismatches'):
-                raise Missing(f'{path.name} records a mismatch in {key}; the '
-                              f'gate did not pass and no table should say it did')
         if not report.get('agree', False):
-            raise Missing(f'{path.name} says the two implementations disagree')
-        rows.append(f'| {corpus_label(path, report)} | '
-                    f'{report["frames_compared"]} | ' + ' | '.join(cells) + ' |')
+            raise Missing(f'{path.name} says the two implementations disagree; '
+                          f'no table should report a gate that did not pass')
+        reports.append((path, report))
 
+    rows = ['| field | values compared | worst absolute deviation |',
+            '|---|---:|---|']
+    worst_overall, worst_field = 0.0, None
+    quantised = []
+    for name, unit in FIELD_UNITS:
+        compared = sum(r['fields'][name]['compared'] for _, r in reports)
+        deviations = [r['fields'][name]['worst_abs_deviation'] for _, r in reports]
+        mismatches = [m for _, r in reports for m in r['fields'][name]['mismatches']]
+        if mismatches:
+            raise Missing(f'the gate records {len(mismatches)} mismatch(es) in '
+                          f'{name}; the table must not say it passed')
+        worst = max((d for d in deviations if d is not None), default=None)
+        if worst is None:
+            if name == 'traj_checksum':
+                near = sum(len(r.get('checksum_quantisation_frames', []))
+                           for _, r in reports)
+                quantised = [(path, entry) for path, r in reports
+                             for entry in r.get('checksum_quantisation_frames', [])]
+                cell = (f'{compared} identical' if not near else
+                        f'{compared - near} identical, {near} on the rounding grid')
+            else:
+                cell = 'exact, every value'
+        else:
+            cell = f'{scientific(worst)}' + (f' ({unit})' if unit else '')
+            if worst > worst_overall:
+                worst_overall, worst_field = worst, name
+        rows.append(f'| `{name}` | {thousands(compared)} | {cell} |')
+
+    frames = sum(r['frames_compared'] for _, r in reports)
+    labels = [corpus_label(path, report) for path, report in reports]
+    listed = ', '.join(labels[:-1]) + f' and {labels[-1]}'
     tolerance = float(src.config['analysis']['equivalence_tolerance'])
-    header = ('| Corpus | Frames | ' +
-              ' | '.join(name for _, name in DEVIATION_FIELDS) + ' |')
-    rule = '|---' * (2 + len(DEVIATION_FIELDS)) + '|'
-    exact = ', '.join(f'`{name}`' for name in EXACT_FIELDS)
-    if worst_overall:
-        margin = (f'The worst deviation anywhere above is '
-                  f'{scientific(worst_overall)} against a tolerance of '
-                  f'{scientific(tolerance)}, a margin of '
-                  f'{significant(tolerance / worst_overall, 2)} times.')
-    else:
-        margin = ('Every field matched to the last bit on every frame, which '
-                  'is a stronger claim than the tolerance asks for and worth '
-                  'reading twice before believing.')
-    tail = (f'\nEach entry is the worst absolute deviation over every frame and '
-            f'every component of that field, in metres, radians or '
-            f'dimensionless matrix entries; `results/equivalence.<corpus>.json` '
-            f'carries the frame each one came from. The fields that compare '
-            f'exactly rather than to a tolerance ({exact}) are not in the '
-            f'table; they matched on every frame of every corpus. {margin}')
-    return '\n'.join([header, rule] + rows) + '\n' + tail
+    tail = (f'\nOver {listed}: {len(reports)} comparisons, {frames} frames, '
+            f'tolerance {scientific(tolerance)}. The worst deviation anywhere '
+            f'above is {scientific(worst_overall)}, in `{worst_field}`, which '
+            f'is {scientific(tolerance / worst_overall)} times inside the '
+            f'tolerance.')
+    if quantised:
+        worst_amplified = max(e['amplified'] for _, e in quantised)
+        half_step = max(e['grid_half_step'] for _, e in quantised)
+        where = ', '.join(f'{corpus_label(path, dict(right={}))} frame '
+                          f'{entry["frame"]}' for path, entry in quantised)
+        tail += (f'\n\nThe digest differences are {where}, and they are the '
+                 f'boundary-straddle case rather than a divergence: the joint '
+                 f'solution behind them agrees to '
+                 f'{scientific(max(e["determinant_deviation"] for _, e in quantised))}'
+                 f', which the quintic amplifies to at most '
+                 f'{scientific(worst_amplified)} inside a waypoint against a '
+                 f'grid half-step of {scientific(half_step)}. Nothing can hide '
+                 f'in that, and the gate says so with the numbers rather than '
+                 f'either failing or staying quiet.')
+    return '\n'.join(rows) + '\n' + tail
+
+
+def _nullspace_row(sweep, damping, gain):
+    for entry in sweep:
+        if entry['damping'] == damping and entry['nullspace_gain'] == gain:
+            return entry
+    raise Missing(f'the sweep has no damping {damping:g} at gain {gain:g}')
 
 
 def sub_nullspace_table(src):
+    """The gain sweep at the damping the pipeline actually runs.
+
+    One column of the grid rather than the whole of it, because this is the
+    column the configured value was chosen from and it is the one that carries
+    the errors. The other four dampings appear as a convergence grid in the
+    prose below, where all they have to say is whether the solve landed.
+    """
     data = src.nullspace
-    rows = ['| `damping` | `nullspace_gain` | Converged | Median iterations | '
-            'Worst position error | Worst orientation error |',
-            '|---|---|---|---|---|---|']
-    for entry in data['sweep']:
-        iterations = ('n/a' if entry['median_iterations'] is None
-                      else str(entry['median_iterations']))
+    damping = src.config['ik']['damping']
+    gains = sorted({e['nullspace_gain'] for e in data['sweep']})
+    rows = ['| `nullspace_gain` | converged | median iterations | '
+            'max iterations | worst position error | worst orientation error |',
+            '|---:|---:|---:|---:|---:|---:|']
+    for gain in gains:
+        entry = _nullspace_row(data['sweep'], damping, gain)
+        median = ('none' if entry['median_iterations'] is None
+                  else str(entry['median_iterations']))
         rows.append(
-            f'| {entry["damping"]:g} | {entry["nullspace_gain"]:g} | '
-            f'{entry["converged"]}/{entry["targets"]} | {iterations} | '
-            f'{significant(entry["worst_position_error_m"] * 1e3, 3)} mm | '
-            f'{significant(entry["worst_orientation_error_rad"] * 1e3, 3)} mrad |')
+            f'| {gain:g} | {entry["converged"]} of {entry["targets"]} | '
+            f'{median} | {entry["max_iterations"]} | '
+            f'{entry["worst_position_error_m"] * 1e3:.4f} mm | '
+            f'{entry["worst_orientation_error_rad"] * 1e3:.2f} mrad |')
+    rows.append('')
+    rows.append(f'At `ik.damping` {damping:g}, the configured value. Errors are '
+                f'measured at whatever pose the solver stopped at, converged or '
+                f'not, because how far off a non-converging configuration parks '
+                f'is the question it raises.')
     return '\n'.join(rows)
 
 
 def sub_nullspace_prose(src):
+    """The paragraphs under the table, written from the sweep.
+
+    Generated rather than typed so that a rerun cannot leave the table saying
+    one thing and the prose another, which is the failure this whole script
+    exists to prevent. The narrative shape is fixed and the numbers are not, so
+    the guard below refuses to produce a paragraph when the data stops
+    supporting the shape, rather than producing a fluent wrong one.
+    """
     data = src.nullspace
     sweep = data['sweep']
-    targets = sweep[0]['targets']
+    targets = data['targets']
     tol_mm = data['position_tolerance_m'] * 1e3
     tol_mrad = data['orientation_tolerance_rad'] * 1e3
+    frames = data.get('target_frames') or list(range(targets))
 
-    full = [e for e in sweep if e['converged'] == e['targets']]
-    if not full:
-        raise Missing('no configuration in the null-space sweep converged on '
-                      'every target; the prose below would be a fiction')
-    gains_that_work = sorted({e['nullspace_gain'] for e in full})
-    biased = [e for e in sweep if e['nullspace_gain'] > 0.0]
-    worst_biased_converged = max(e['converged'] for e in biased)
-    biased_orientation = min(e['worst_orientation_error_rad'] for e in biased)
-    chosen = src.config['ik']['nullspace_gain']
+    chosen_gain = src.config['ik']['nullspace_gain']
     chosen_damping = src.config['ik']['damping']
-    at_chosen = next(e for e in sweep
-                     if e['nullspace_gain'] == chosen
-                     and e['damping'] == chosen_damping)
-    zero_gain = [e for e in sweep if e['nullspace_gain'] == 0.0]
-    worst_zero_position = max(e['worst_position_error_m'] for e in zero_gain)
-    worst_zero = max(zero_gain, key=lambda e: e['worst_position_error_m'])
+    dampings = sorted({e['damping'] for e in sweep}, reverse=True)
+    gains = sorted({e['nullspace_gain'] for e in sweep}, reverse=True)
 
-    if gains_that_work != [0.0]:
-        # Kept honest rather than kept short: if a future change makes the
-        # biased solver converge, the paragraph has to stop saying it cannot.
-        works = ', '.join(f'{g:g}' for g in gains_that_work)
-        return (f'Configurations that converged on all {targets} targets '
-                f'appear at gains {works}, which is not the picture this '
-                f'section was written for. Rerun and rewrite it.')
+    def row(damping, gain):
+        return _nullspace_row(sweep, damping, gain)
 
-    return (
-        f'The gain, not the damping, decides it. Every configuration with the '
-        f'gain at zero converged on all {targets} targets; no configuration '
-        f'with the gain above zero converged on more than '
-        f'{worst_biased_converged}, at any damping in the sweep. The failures '
-        f'are not the solver running out of iterations. It reaches a fixed '
-        f'point and stays there: the best orientation error any biased '
-        f'configuration reached was {significant(biased_orientation * 1e3, 3)} '
-        f'mrad against a tolerance of {significant(tol_mrad, 2)} mrad. '
-        f'`I - J^T (J J^T + lambda^2 I)^-1 J` is not a null-space projector '
-        f'while `lambda > 0`, so the pull toward `q_neutral` does not stay in '
-        f'the null space; it leaks into task space and is balanced there by '
-        f'the task error rather than driven out of it.\n\n'
-        f'Damping matters in the other direction and only once the gain is '
-        f'off. At {worst_zero["damping"]:g} the worst position error over the '
-        f'{targets} targets is {significant(worst_zero_position * 1e3, 3)} mm, '
-        f'against {significant(at_chosen["worst_position_error_m"] * 1e3, 3)} '
-        f'mm at the configured {chosen_damping:g}: too little damping is what '
-        f'goes wrong near a singularity, and it goes wrong in position rather '
-        f'than in orientation.\n\n'
-        f'A true pseudo-inverse projector converges, and costs an SVD per '
-        f'iteration in the stage that is already the most expensive part of '
-        f'the Python frame per unit of work done. Since every frame is seeded '
-        f'from `q_neutral`, the solution is already near the neutral posture '
-        f'and the bias has nothing left to buy. So `ik.nullspace_gain` is '
-        f'{chosen:g}, and the median IK cost in `RESULTS.md` is the cost of '
-        f'the solver that converges rather than of one that runs to the '
-        f'iteration cap on every frame. The tolerance those columns are judged '
-        f'against is {significant(tol_mm, 2)} mm and '
-        f'{significant(tol_mrad, 2)} mrad, from `ik.position_tolerance_m` and '
-        f'`ik.orientation_tolerance_rad`.')
+    def full(entry):
+        return entry['converged'] == entry['targets']
+
+    at_chosen = row(chosen_damping, chosen_gain)
+    strongest = row(chosen_damping, max(gains))
+    if not full(at_chosen) or full(strongest):
+        return (f'At the configured damping {chosen_damping:g} the sweep now '
+                f'reports {at_chosen["converged"]}/{targets} at gain '
+                f'{chosen_gain:g} and {strongest["converged"]}/{targets} at '
+                f'gain {max(gains):g}. That is not the result this section was '
+                f'written around, so it needs rewriting rather than refilling.')
+
+    # The largest gain that still converges on everything at the configured
+    # damping, and the smallest that does not: the boundary is the finding.
+    works = [g for g in sorted(gains) if full(row(chosen_damping, g))]
+    fails = [g for g in sorted(gains) if not full(row(chosen_damping, g))]
+    first_total = min((g for g in fails
+                       if row(chosen_damping, g)['converged'] == 0),
+                      default=None)
+
+    paragraphs = [
+        f'At gain {chosen_gain:g} the solver converges on {at_chosen["converged"]} '
+        f'of {targets} targets in a median of {at_chosen["median_iterations"]} '
+        f'iterations, worst case {at_chosen["max_iterations"]}, with a worst '
+        f'position error of {at_chosen["worst_position_error_m"] * 1e3:.4f} mm '
+        f'against a tolerance of {significant(tol_mm, 2)} mm. Those are the '
+        f'figures the IK column of `RESULTS.md` is the cost of.',
+
+        f'Raising the gain buys nothing and costs convergence. The term is '
+        f'`I - J^T (J J^T + lambda^2 I)^-1 J`, which is not a null-space '
+        f'projector while `lambda > 0`: it differs from the true projector by '
+        f'`O(lambda^2)`, so the posture bias does not stay in the redundant '
+        f'degree of freedom. It leaks into task space, where it is balanced '
+        f'against the task error rather than driven out of it, and the balance '
+        f'point sits outside the tolerance. The largest gain that still reaches '
+        f'every target at damping {chosen_damping:g} is '
+        f'{max(works):g}' +
+        ('' if first_total is None else
+         f'. From gain {first_total:g} upward it reaches tolerance on none of '
+         f'them and burns all '
+         f'{row(chosen_damping, first_total)["max_iterations"]} iterations on '
+         f'every frame') + '.',
+
+        f'**What fails is position, not orientation.** At gain 0.1 the '
+        f'orientation error stays inside '
+        f'{row(chosen_damping, 0.1)["worst_orientation_error_rad"] * 1e3:.2f} '
+        f'mrad, well under the {significant(tol_mrad, 2)} mrad tolerance, '
+        f'while the position error reaches '
+        f'{row(chosen_damping, 0.1)["worst_position_error_m"] * 1e3:.2f} mm '
+        f'against {significant(tol_mm, 2)} mm. An earlier revision of '
+        f'`ALGORITHM.md` and of `ik.nullspace_note` attributed the failure to a '
+        f'198 mrad orientation error. That figure came from a sweep taken '
+        f'before the S5 wrist fold existed, which changed which of two '
+        f'equivalent grasp frames is demanded and so changed where the solver '
+        f'stalls, and it does not reproduce here. The 0 of '
+        f'{targets} result does, and both files now carry the corrected '
+        f'diagnosis.',
+    ]
+
+    grid = ['| `damping` \\ `nullspace_gain` | ' +
+            ' | '.join(f'{g:g}' for g in gains) + ' |',
+            '|---:' * (1 + len(gains)) + '|']
+    for damping in dampings:
+        cells = ' | '.join(str(row(damping, g)['converged']) for g in gains)
+        marker = ' (configured)' if damping == chosen_damping else ''
+        grid.append(f'| {damping:g}{marker} | {cells} |')
+
+    safe_below = None
+    for damping in sorted(dampings):
+        if all(full(row(damping, g)) for g in gains):
+            safe_below = damping
+        else:
+            break
+
+    cross = (f'The damping decides which gains are survivable, which is why '
+             f'this is a grid and not a column. Targets reached, out of '
+             f'{targets}:\n\n' + '\n'.join(grid) + '\n\n'
+             f'The boundary moves the way the `O(lambda^2)` leak says it '
+             f'should: the less damping, the smaller the projector error and '
+             f'the more posture bias the task can absorb.')
+    if safe_below is not None:
+        cross += (f' At damping {safe_below:g} and below, every gain in the '
+                  f'sweep reached every target, so the term is not fatal in '
+                  f'itself. It is fatal at the damping this pipeline runs.')
+
+    reversal = None
+    for damping in dampings:
+        unbiased = row(damping, 0.0)
+        if unbiased['failed_targets']:
+            rescued = [g for g in gains if g > 0.0 and full(row(damping, g))]
+            reversal = (damping, unbiased, rescued)
+            break
+    if reversal is not None:
+        damping, unbiased, rescued = reversal
+        failed = unbiased['failed_targets']
+        plural = 's' if len(failed) > 1 else ''
+        named = ', '.join(str(frames[i]) for i in failed)
+        rescue = ('' if not rescued else
+                  f', and is reached at gain '
+                  f'{", ".join(f"{g:g}" for g in rescued)}')
+        cross += (f' Less damping is not uniformly safer either. At damping '
+                  f'{damping:g}, frame{plural} {named} of the store ends up '
+                  f'{unbiased["worst_position_error_m"] * 1e3:.1f} mm and '
+                  f'{unbiased["worst_orientation_error_rad"] * 1e3:.1f} mrad '
+                  f'away with the gain off{rescue}. That failure is not '
+                  f'monotonic in either parameter, which is what a '
+                  f'near-singular target looks like when the damping is the '
+                  f'only thing regularising the solve.')
+    paragraphs.append(cross)
+
+    zero_full = sum(1 for d in dampings if full(row(d, 0.0)))
+    paragraphs.append(
+        f'A genuine pseudo-inverse projector does converge, and costs an SVD '
+        f'per iteration on a stage that runs every frame. Since every frame is '
+        f'seeded from `q_neutral` the solution already sits near the neutral '
+        f'posture, so the term has nothing left to buy and the default is '
+        f'{chosen_gain:g}. The damping stays at {chosen_damping:g}, the most '
+        f'damped value in the sweep and one of the {zero_full} dampings out '
+        f'of {len(dampings)} that reach every target with the gain off.')
+
+    return '\n\n'.join(paragraphs)
 
 
 # name -> (producer, is_block). A block substitution sits on its own lines.
@@ -476,11 +606,12 @@ def measure_nullspace(results: Path, data_root: Path) -> dict:
 
     pipeline = GraspPipeline(CONFIG, ROOT / 'assets/franka/panda_chain.json',
                              ROOT / 'assets/ransac_uniform.bin')
-    targets = []
-    for depth, rgb in store.frames:
+    targets, target_frames = [], []
+    for frame, (depth, rgb) in enumerate(store.frames):
         result = pipeline.run(depth, rgb, store.width, store.height)
         if result.graspable:
             targets.append(result.tcp.copy())
+            target_frames.append(frame)
     if not targets:
         raise Missing(f'{reference} produced no graspable frame to solve for')
 
@@ -491,11 +622,12 @@ def measure_nullspace(results: Path, data_root: Path) -> dict:
         for gain in NULLSPACE_GAINS:
             settings = dict(base, damping=damping, nullspace_gain=gain)
             solver = IKSolver(chain, settings)
-            converged, iterations = 0, []
+            converged, iterations, every_iteration = 0, [], []
             position_error, orientation_error = [], []
             for target in targets:
                 ok = solver.solve(target)
                 converged += int(ok)
+                every_iteration.append(solver.iterations)
                 if ok:
                     iterations.append(solver.iterations)
                 # The error is measured at whatever pose the solver stopped at,
@@ -518,6 +650,7 @@ def measure_nullspace(results: Path, data_root: Path) -> dict:
                 'converged': converged,
                 'median_iterations': (None if not iterations
                                       else int(np.median(iterations))),
+                'max_iterations': int(max(every_iteration)),
                 'worst_position_error_m': float(position_error.max()),
                 'worst_position_target': int(position_error.argmax()),
                 'worst_orientation_error_rad': float(orientation_error.max()),
@@ -536,6 +669,9 @@ def measure_nullspace(results: Path, data_root: Path) -> dict:
     report = {
         'dataset': reference,
         'targets': len(targets),
+        'target_frames': target_frames,
+        'target_index_note': 'targets are the graspable frames in store order; '
+                             'target_frames[i] is the frame target i came from',
         'seeded_from': 'q_neutral',
         'max_iterations': base['max_iterations'],
         'position_tolerance_m': base['position_tolerance_m'],

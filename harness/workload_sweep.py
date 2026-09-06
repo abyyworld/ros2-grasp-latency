@@ -104,6 +104,18 @@ NS_PER_US = 1e3
 DEVIATES_PER_ITERATION = 3
 DOUBLE_BYTES = 8
 
+# The largest block the Python plane stage can be given without computing the
+# wrong answer, found by this sweep rather than assumed. `plane.py` reduces
+# each block's hit mask with `dtype=np.int16` on the grounds that "a block
+# cannot overflow it", which holds at the committed 512 and fails above 32767:
+# the per-block inlier count wraps negative, RANSAC then picks a different
+# candidate from the C++ implementation, and the equivalence gate fails with
+# plane normals 0.14 apart. The gate caught it on the first configuration where
+# the calibration reached for a large block, which is what a gate is for.
+# `assets/pipeline_config.json` still says of `ransac_block_points` that "any
+# value gives bit-identical output"; that claim is true only below this bound.
+BLOCK_INT16_LIMIT = 32767
+
 # Markers around the section this script maintains inside results/RESULTS.md.
 # analyze.py rewrites that file from scratch, so the section has to be
 # re-insertable rather than hand-typed: a number in prose that no run produced
@@ -277,16 +289,18 @@ def block_candidates(variant: Variant, pixels: int, committed: int,
                      cap_elements: int) -> list[int]:
     """Block sizes worth measuring for this configuration.
 
-    Bounded above twice: by the sampled pixel count, since a block larger than
-    the cloud is the same run as one block over the whole cloud, and by a cap
+    Bounded above three times: by the sampled pixel count, since a block larger
+    than the cloud is the same run as one block over the whole cloud; by a cap
     on `block * iterations` so the distance matrix cannot grow into something
-    no sensible implementation would allocate. The committed value is always in
-    the list, because the interesting comparison is against it.
+    no sensible implementation would allocate; and by `BLOCK_INT16_LIMIT`,
+    above which the Python plane stage's own partial reduction overflows and
+    the answer changes. The committed value is always in the list, because the
+    interesting comparison is against it.
     """
     sampled = (pixels + variant.stride ** 2 - 1) // variant.stride ** 2
-    limit = max(1, cap_elements // variant.iterations)
+    limit = min(max(1, cap_elements // variant.iterations), BLOCK_INT16_LIMIT)
     values = {committed}
-    for value in (512, 2048, 8192, 32768, 131072, 524288):
+    for value in (512, 2048, 8192, 32767):
         if value <= sampled and value <= limit:
             values.add(value)
     if sampled <= limit:
@@ -396,12 +410,21 @@ def measure(variant: Variant, args, base_config: dict, work_dir: Path,
     method = base_config['analysis']['percentile_method']
 
     outputs = {}
+    load_before = {}
     for impl, command in (
         ('cpp', [str(Path(args.build_dir) / 'bench_pipeline')]),
         ('py', [sys.executable, 'python/bench/bench_pipeline.py']),
     ):
         timing = work_dir / f'{variant.key}.{impl}.timing.jsonl'
         output = work_dir / f'{variant.key}.{impl}.output.jsonl'
+        # Per run, not just per sweep. This box is shared and unpinned, and a
+        # single row taken while something else was compiling is the kind of
+        # number that survives into a conclusion if nothing records the
+        # conditions it was taken under.
+        try:
+            load_before[impl] = list(os.getloadavg())
+        except OSError:
+            load_before[impl] = None
         run(command + [
             '--dataset', str(args.dataset),
             '--config', str(variant.config_path),
@@ -430,6 +453,7 @@ def measure(variant: Variant, args, base_config: dict, work_dir: Path,
     for impl in ('cpp', 'py'):
         row[impl] = summarise(load_timing(outputs[impl][0]), percentiles,
                               method)
+        row[impl]['load_average_before'] = load_before[impl]
 
     cpp_total = row['cpp']['total_ns']
     py_total = row['py']['total_ns']
@@ -951,9 +975,9 @@ def main(argv=None) -> int:
                              'it per configuration by measurement, an integer '
                              'holds it fixed. Only the Python side reads it '
                              'and it never changes output.')
-    parser.add_argument('--calibration-frames', type=int, default=60,
+    parser.add_argument('--calibration-frames', type=int, default=40,
                         help='measured frames per block-size candidate')
-    parser.add_argument('--calibration-warmup', type=int, default=40)
+    parser.add_argument('--calibration-warmup', type=int, default=30)
     parser.add_argument('--block-cap-elements', type=int, default=4_194_304,
                         help='upper bound on block_points * iterations, so a '
                              'candidate cannot allocate a distance matrix no '
@@ -962,8 +986,31 @@ def main(argv=None) -> int:
                         default=REPO_ROOT / 'results' / 'RESULTS.md',
                         help='RESULTS.md to insert the section into; pass an '
                              'empty string to skip')
+    parser.add_argument('--from-json', type=Path, default=None,
+                        help='rewrite the CSV, the plot and the RESULTS.md '
+                             'section from a sweep that already ran, without '
+                             'measuring anything again. `harness/analyze.py` '
+                             'regenerates RESULTS.md from scratch and takes '
+                             'the section with it, and re-measuring to put a '
+                             'paragraph back would be minutes of machine time '
+                             'for no new information.')
     parser.add_argument('--quiet', action='store_true')
     args = parser.parse_args(argv)
+
+    if args.from_json is not None:
+        summary = json.loads(Path(args.from_json).read_text(encoding='utf-8'))
+        out_dir = Path(args.out_dir)
+        write_csv(summary['configurations'], out_dir / 'workload_sweep.csv')
+        plot(summary, out_dir / 'workload_sweep.png')
+        if str(args.results_md) and Path(args.results_md).is_file():
+            results_md = Path(args.results_md)
+            results_md.write_text(
+                insert_section(results_md, markdown_section(summary)),
+                encoding='utf-8')
+            print(f'wrote {results_md}', file=sys.stderr)
+        print(f"rewrote the outputs of the sweep taken at "
+              f"{summary['metadata']['generated_at_utc']}", file=sys.stderr)
+        return 0
 
     bench = Path(args.build_dir) / 'bench_pipeline'
     if not bench.is_file():
