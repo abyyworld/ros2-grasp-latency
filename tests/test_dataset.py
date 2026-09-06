@@ -65,9 +65,16 @@ def test_manifest_shape(corpus, cfg):
         assert key in manifest, f"manifest is missing {key}"
     assert manifest["frame_count"] == FRAMES == len(manifest["frames"])
 
-    scale = WIDTH / cfg["camera"]["reference_width"]
-    assert manifest["fx"] == pytest.approx(cfg["camera"]["fx"] * scale)
-    assert manifest["cy"] == pytest.approx(cfg["camera"]["cy"] * scale)
+    # Square pixels, focal length scaling with the vertical resolution, and the
+    # principal point at image centre. A wider mode on the same optics is a
+    # wider horizontal field of view, not a stretched 4:3 image, so cy must not
+    # be scaled by the width ratio: doing that put the principal point 77 rows
+    # below centre on the 848x480 corpus. See docs/ALGORITHM.md S1.
+    scale = HEIGHT / cfg["camera"]["reference_height"]
+    assert manifest["fx"] == pytest.approx(cfg["camera"]["fy"] * scale)
+    assert manifest["fy"] == pytest.approx(cfg["camera"]["fy"] * scale)
+    assert manifest["cx"] == pytest.approx((WIDTH - 1) / 2.0)
+    assert manifest["cy"] == pytest.approx((HEIGHT - 1) / 2.0)
     assert json.loads((store / "manifest.json").read_text()) == manifest
 
     for index, frame in enumerate(manifest["frames"]):
