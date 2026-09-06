@@ -17,7 +17,16 @@ endif()
 # Pinned rather than inherited: docs/TOOLCHAIN.md quotes these flags next to
 # every latency figure, so a default that changed with the CMake version would
 # silently invalidate a published number.
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
+#
+# CACHE, not a bare set(). A bare set() overrode the cache, so passing
+# -DCMAKE_CXX_FLAGS_RELEASE on the command line was accepted and then ignored:
+# all three of -O2, -O3 and -O3 -march=native produced a byte-identical binary.
+# That is a bad property in any project and a disqualifying one here, where the
+# headline is a ratio against this build. See results/compiler_flags.json:
+# -march=native is 1.58x faster than the pinned default and moves the ratio
+# from 1.65x to 2.60x.
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG"
+    CACHE STRING "Release flags. The published numbers use the default; see docs/METHOD.md.")
 
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 

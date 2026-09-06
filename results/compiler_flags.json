@@ -1,0 +1,45 @@
+{
+  "note": "Identical binaries across flags would mean CMakeLists is overriding the cache; the md5 column is what catches that.",
+  "dataset": "data/table_640x480",
+  "frames": 250,
+  "warmup": 50,
+  "load_average_before": [
+    1.41,
+    1.36,
+    1.67
+  ],
+  "load_average_after": [
+    2.3,
+    1.72,
+    1.77
+  ],
+  "variants": [
+    {
+      "flags": "-O2 -DNDEBUG",
+      "binary_md5": "dad248e6a8b5d28be37c85fa5fc997e7",
+      "total_p50_ms": 52.960097,
+      "total_p99_ms": 58.808154,
+      "plane_p50_ms": 50.597009,
+      "ik_p50_us": 24.493,
+      "speedup_vs_default": 1.0
+    },
+    {
+      "flags": "-O3 -DNDEBUG",
+      "binary_md5": "4e0663ffefe98caa01397cd283727e53",
+      "total_p50_ms": 56.376432,
+      "total_p99_ms": 68.083347,
+      "plane_p50_ms": 54.112498,
+      "ik_p50_us": 21.709,
+      "speedup_vs_default": 0.9394013619024346
+    },
+    {
+      "flags": "-O3 -DNDEBUG -march=native",
+      "binary_md5": "99f9757020c4638740a84599a1b93c7c",
+      "total_p50_ms": 33.252657,
+      "total_p99_ms": 45.368398,
+      "plane_p50_ms": 30.953589,
+      "ik_p50_us": 38.996,
+      "speedup_vs_default": 1.59265760327062
+    }
+  ]
+}

@@ -350,23 +350,107 @@ A genuine pseudo-inverse projector does converge, and costs an SVD per iteration
 None of these are hypothetical and none are cheap to dismiss. They are ordered
 roughly by how much they could move the headline number.
 
-## T1. The pipeline's shape decides the answer, and the shape was chosen once
+## T1. The pipeline's shape decides the answer, so the shape was swept
 
 This is the largest threat and it is not a caveat, it is the main result's
 boundary. `deproject.stride` is 1 and `plane.iterations` is 128, so the RANSAC
-plane stage dominates the frame at every resolution, and that stage is a large
-blocked array reduction in both languages. A pipeline dominated by one big
-vectorised reduction is close to the best case for NumPy, because almost all of
-the wall time is spent inside compiled loops that both implementations reach.
+plane stage is about 95% of the C++ frame at 640x480 in every run this
+repository has taken, and that stage is one large
+array reduction: Python issues it as a handful of NumPy calls per block of
+points and then waits inside compiled loops. A pipeline shaped like that is
+close to the best case for Python. The sharp question is the obvious one, and
+it deserves a number rather than a paragraph: a real implementation subsamples
+its cloud and runs a shorter RANSAC, so how much of the headline ratio is the
+language and how much is the shape?
 
-Change the constants and the ratio changes. Raise `deproject.stride` to 4 and
-the point count drops sixteenfold, the plane stage stops dominating, and the
-per-frame Python interpreter overhead in the small-matrix stages (grasp, IK,
-trajectory) becomes a much larger share. The per-stage table in `RESULTS.md`
-makes this visible on purpose: the stages where the ratio is smallest are the
-big-array ones and the stages where it is tens of times are the ones that
-iterate. **The single headline ratio is a property of this pipeline at these
-constants, and the per-stage table is the transferable result.**
+This section used to answer by asserting that changing the constants would
+change the ratio. `harness/workload_sweep.py` measures it. On `table_640x480`,
+500 measured frames per implementation per configuration after 100 warm-up
+frames, every configuration measured twice end to end, and
+`harness/compare_outputs.py` run on every configuration before its row is kept:
+
+| stride | plane.iterations | plane share of the C++ frame | py:cpp at p50 |
+|---|---|---|---|
+| 1 (published) | 128 | 95.5% | 1.59x |
+| 2 | 128 | 95.2% | 1.71x |
+| 4 | 128 | 94.2% | 2.17x |
+| 8 | 128 | 91.9% | 2.12x |
+| 1 | 32 | 85.8% | 4.20x |
+| 1 | 8 | 68.9% | 7.89x |
+
+`results/RESULTS.md` carries the full table with both percentiles, the
+bail-out counts and the gate's worst deviation per row; the data is in
+`results/workload_sweep.json` and `results/workload_sweep.csv` and the plot is
+`results/workload_sweep.png`.
+
+**The ratio is a function of the shape, and the published constants sit at the
+flattering end of it.** Between the published configuration and the same
+pipeline with 8 RANSAC candidates instead of 128, the ratio moves from 1.59x to
+7.89x while the plane stage falls from 95.5% to 68.9% of the C++ frame. Nothing
+else changed: both implementations read the same derived config file, and each
+configuration's deviate table is a prefix of the committed one, so a
+32-iteration run scores the same first 32 candidate triples the 128-iteration
+run scored.
+
+Four things the sweep says that the assertion did not.
+
+**The two knobs are not the same knob.** Striding the cloud shrinks every
+per-point stage in both implementations, so the C++ frame keeps its
+proportions: the plane stage is still 91.9% of it at stride 8. The ratio still
+rises, to 2.17x at stride 4, because what does not shrink is Python's per-call
+cost in the small-matrix stages, which go from 2.1% of the Python frame at
+stride 1 to 19.8% at stride 4 against 0.6% of the C++ frame. Cutting the
+candidate count attacks the vectorised stage alone and moves the ratio much
+further, to 7.89x.
+
+**The Python plane stage scales with points and not with candidates.**
+Striding by 4 divides the C++ plane stage by 16.2 and the Python one by 14.3,
+which is the same stage doing the same sixteenth of the work in both. Cutting
+the candidates from 128 to 8 divides the C++ plane stage by 10.5, from 50.8 ms
+to 4.8 ms, and the Python one by only 1.95, from 60.9 ms to 31.2 ms. Whatever
+the vectorised scoring costs, what is left in the Python stage does not depend
+on the candidate count: it is per-frame work over the whole cloud, and at 128
+candidates the scoring is large enough to hide it. The sweep does not decompose
+that remainder further, and it is the single largest reason the ratio moves.
+
+**A tuning constant had to be re-chosen, and choosing it by measurement found a
+bug.** `implementation.ransac_block_points` is read only by the Python plane
+stage. Holding the committed 512 across the sweep would have charged Python for
+a constant chosen when the distance block was 512 x 128 float64, so every
+configuration re-picks it the way that value was picked, by measurement, with
+the whole calibration curve in `workload_sweep.json`. At 128 candidates 512 is
+confirmed best of the candidates measured (62.9 ms against 79.3 ms at 2048); at
+8 candidates a 2048-point block is better (31.0 ms against 34.5 ms), which is
+worth 3.5 ms and not worth a language conclusion. The bug is upstream of all of
+that: `plane.py` accumulates each block's inlier count in `int16` on the
+grounds that "a block cannot overflow it", which stops being true above 32767
+points per block. The calibration reached 131072, the counts wrapped, RANSAC
+picked a different candidate from the C++ implementation, and the gate failed
+with plane normals 0.139 apart and `graspable` disagreeing on two frames.
+`assets/pipeline_config.json` still says of that key that "any value gives
+bit-identical output"; that holds only below 32767. The sweep now caps its
+candidates there and says why in the code.
+
+**Two of the rows are a different pipeline, and that is also an answer.** At
+stride 8, 450 of 500 measured samples find no cluster holding
+`cluster.min_points` and stop at S4, so that row mostly times a pipeline
+without grasp synthesis, IK or a trajectory in it. Subsampling that hard takes
+the object out of the cloud along with the cost, which is the honest answer to
+whether a stride like that is free. At stride 4 the same thing happens to 15 of
+500 samples.
+
+**Read the sweep at p50.** Each configuration was measured twice: the p50 ratio
+repeated to within 0.39 of a ratio point, 9% of the row it happened on, and the
+p99 ratio moved by up to 2.99. That is threat T2 landing exactly where T2 says
+it lands, and it is why the curve above is a p50 curve. The load average before
+every single run is in the JSON.
+
+Two limits on all of this. It is one corpus on one machine, so the numbers are
+this box; and the sweep moves two constants, while a different pipeline differs
+in more than two. The transferable part is not the six rows, it is the axis
+they are plotted against: **the share of the frame that is one large array
+reduction predicts the ratio better than the choice of language does, and the
+single headline ratio is one point on that curve.**
 
 ## T2. Four shared vCPUs, no pinning, no isolation
 

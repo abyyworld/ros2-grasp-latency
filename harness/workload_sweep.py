@@ -64,6 +64,12 @@ statistic of a specific size, so the metadata records which sample it is:
 quoting a p99 without saying what it was counted from is how a tail number
 becomes decoration.
 
+It does not report one measurement per row either. Every configuration is
+measured `--repeats` times end to end and the first repeat is published, with
+the spread across repeats beside it. On this shared box that spread is the
+finding that decides how the table should be read: the p50 ratio repeats to
+within a few hundredths and the p99 ratio does not repeat at all.
+
 It also does not touch either implementation, `assets/pipeline_config.json`, or
 the committed deviate table. Everything it writes goes to a work directory that
 is temporary by default, and the published outputs are the three
@@ -403,8 +409,8 @@ def gate(cpp_output: Path, py_output: Path, report: Path,
     }
 
 
-def measure(variant: Variant, args, base_config: dict, work_dir: Path,
-            calibration: dict) -> dict:
+def measure_once(variant: Variant, args, base_config: dict, work_dir: Path,
+                 repeat: int) -> dict:
     """Benchmark both implementations under one configuration and gate them."""
     percentiles = base_config['analysis']['percentiles']
     method = base_config['analysis']['percentile_method']
@@ -415,8 +421,8 @@ def measure(variant: Variant, args, base_config: dict, work_dir: Path,
         ('cpp', [str(Path(args.build_dir) / 'bench_pipeline')]),
         ('py', [sys.executable, 'python/bench/bench_pipeline.py']),
     ):
-        timing = work_dir / f'{variant.key}.{impl}.timing.jsonl'
-        output = work_dir / f'{variant.key}.{impl}.output.jsonl'
+        timing = work_dir / f'{variant.key}.r{repeat}.{impl}.timing.jsonl'
+        output = work_dir / f'{variant.key}.r{repeat}.{impl}.output.jsonl'
         # Per run, not just per sweep. This box is shared and unpinned, and a
         # single row taken while something else was compiling is the kind of
         # number that survives into a conclusion if nothing records the
@@ -437,19 +443,11 @@ def measure(variant: Variant, args, base_config: dict, work_dir: Path,
         ] + (['--quiet'] if args.quiet and impl == 'py' else []), args.quiet)
         outputs[impl] = (timing, output)
 
-    equivalence = gate(outputs['cpp'][1], outputs['py'][1],
-                       work_dir / f'{variant.key}.equivalence.json', args.quiet)
+    equivalence = gate(
+        outputs['cpp'][1], outputs['py'][1],
+        work_dir / f'{variant.key}.r{repeat}.equivalence.json', args.quiet)
 
-    row = {
-        'key': variant.key,
-        'label': variant.label,
-        'baseline': variant.baseline,
-        'stride': variant.stride,
-        'plane_iterations': variant.iterations,
-        'ransac_deviates': variant.iterations * DEVIATES_PER_ITERATION,
-        'block_calibration': calibration,
-        'equivalence': equivalence,
-    }
+    row = {'repeat': repeat, 'equivalence': equivalence}
     for impl in ('cpp', 'py'):
         row[impl] = summarise(load_timing(outputs[impl][0]), percentiles,
                               method)
@@ -474,6 +472,47 @@ def measure(variant: Variant, args, base_config: dict, work_dir: Path,
         row['cpp']['stage_ns'][key]['p50_ns'] for key in small) / cpp_total['p50_ns']
     row['small_matrix_share_py'] = sum(
         row['py']['stage_ns'][key]['p50_ns'] for key in small) / py_total['p50_ns']
+    return row
+
+
+def measure(variant: Variant, args, base_config: dict, work_dir: Path,
+            calibration: dict) -> dict:
+    """Measure one configuration `--repeats` times and publish the first.
+
+    One measurement per row cannot show whether the row was disturbed, and on
+    a shared unpinned box (threat T2) something usually is. Repeating each
+    configuration end to end gives the reader the spread rather than an
+    assurance: on this machine the p50 ratio repeats closely and the p99 ratio
+    does not, which is a fact about the box and belongs in the artifact instead
+    of in a footnote. The published row is the first repeat, chosen by position
+    rather than by outcome, because picking the prettiest repeat is how a
+    benchmark stops being a measurement.
+    """
+    repeats = [measure_once(variant, args, base_config, work_dir, index)
+               for index in range(max(1, args.repeats))]
+    row = {
+        'key': variant.key,
+        'label': variant.label,
+        'baseline': variant.baseline,
+        'stride': variant.stride,
+        'plane_iterations': variant.iterations,
+        'ransac_deviates': variant.iterations * DEVIATES_PER_ITERATION,
+        'block_calibration': calibration,
+    }
+    row.update(repeats[0])
+    row['repeats'] = repeats
+    row['spread'] = {
+        'count': len(repeats),
+        'published_repeat': 0,
+        'ratio_p50': [entry['ratio_p50'] for entry in repeats],
+        'ratio_p99': [entry['ratio_p99'] for entry in repeats],
+        'plane_share_cpp': [entry['plane_share_cpp'] for entry in repeats],
+        'cpp_p50_ns': [entry['cpp']['total_ns']['p50_ns'] for entry in repeats],
+        'py_p50_ns': [entry['py']['total_ns']['p50_ns'] for entry in repeats],
+    }
+    for name in ('ratio_p50', 'ratio_p99'):
+        values = row['spread'][name]
+        row['spread'][f'{name}_range'] = max(values) - min(values)
     return row
 
 
@@ -545,7 +584,8 @@ def observed_host() -> dict:
 CSV_COLUMNS = (
     'key', 'stride', 'plane_iterations', 'baseline', 'frames', 'distinct_frames',
     'median_points', 'cpp_p50_ms', 'cpp_p99_ms', 'py_p50_ms', 'py_p99_ms',
-    'ratio_p50', 'ratio_p99', 'plane_share_cpp', 'plane_share_py',
+    'ratio_p50', 'ratio_p99', 'repeats', 'ratio_p50_range', 'ratio_p99_range',
+    'plane_share_cpp', 'plane_share_py',
     'small_matrix_share_cpp', 'small_matrix_share_py',
     'cpp_plane_p50_ms', 'py_plane_p50_ms', 'cpp_ik_p50_us', 'py_ik_p50_us',
     'py_block_points', 'py_block_points_committed',
@@ -588,6 +628,9 @@ def csv_row(row: dict) -> dict:
         'py_p99_ms': f"{row['py']['total_ns']['p99_ns'] / NS_PER_MS:.4f}",
         'ratio_p50': f"{row['ratio_p50']:.4f}",
         'ratio_p99': f"{row['ratio_p99']:.4f}",
+        'repeats': row['spread']['count'],
+        'ratio_p50_range': f"{row['spread']['ratio_p50_range']:.4f}",
+        'ratio_p99_range': f"{row['spread']['ratio_p99_range']:.4f}",
         'plane_share_cpp': f"{row['plane_share_cpp']:.6f}",
         'plane_share_py': f"{row['plane_share_py']:.6f}",
         'small_matrix_share_cpp': f"{row['small_matrix_share_cpp']:.6f}",
@@ -656,15 +699,43 @@ def plot(summary: dict, path: Path) -> None:
         axis.plot(shares, [r['ratio_p99'] for r in members], '--s',
                   color=colour, linewidth=1.1, alpha=0.55,
                   markerfacecolor='none', label=f'{name}, p99')
-        # Families are annotated on opposite sides: the stride points crowd
-        # together near the published share, and one label on top of another
-        # is a plot that has to be read from the CSV instead.
+        # The stride points crowd into a few per cent of x, so their labels are
+        # staggered downward and the iteration labels go up. The published
+        # point carries the star and its label in the other family, so it is
+        # not annotated twice.
         below = name.startswith('deproject')
+        # The stride points crowd into four per cent of the x axis, so their
+        # labels are stacked clear of the line and joined to their points with
+        # leaders. The iteration points are far apart and need neither. The
+        # published point carries the star and its label in the stride family,
+        # so it is not annotated twice.
+        stack = [(-64, 40), (-64, 22), (-64, 4), (-64, -14), (-64, -32)]
+        step = 0
         for row, x in zip(members, shares):
-            axis.annotate(tag(row), (x, row['ratio_p50']),
-                          textcoords='offset points',
-                          xytext=(7, -13 if below else 7),
-                          fontsize=8, color=colour)
+            if row['baseline'] and not below:
+                continue
+            if below:
+                axis.annotate(tag(row), (x, row['ratio_p50']),
+                              textcoords='offset points',
+                              xytext=stack[step % len(stack)], fontsize=8,
+                              color=colour,
+                              arrowprops={'arrowstyle': '-', 'linewidth': 0.6,
+                                          'color': colour, 'alpha': 0.7})
+            else:
+                axis.annotate(tag(row), (x, row['ratio_p50']),
+                              textcoords='offset points', xytext=(8, 8),
+                              fontsize=8, color=colour)
+            step += 1
+    # Every repeat, not just the published one. Two dots far apart say more
+    # about how much to trust a point than any interval this box could earn.
+    for row in rows:
+        spread = row.get('spread', {})
+        for share, ratio in zip(spread.get('plane_share_cpp', []),
+                                spread.get('ratio_p50', [])):
+            axis.plot([100.0 * share], [ratio], marker='.', markersize=6,
+                      linestyle='none', color='0.45', zorder=1)
+    axis.plot([], [], marker='.', markersize=6, linestyle='none', color='0.45',
+              label='individual repeats, p50')
     axis.plot([100.0 * baseline['plane_share_cpp']], [baseline['ratio_p50']],
               marker='*', markersize=15, linestyle='none', color='#c0504d',
               label='published configuration')
@@ -744,17 +815,31 @@ def markdown_section(summary: dict) -> str:
 
     reference = meta.get('published_reference')
     if reference:
+        cpp_gap = (baseline['cpp']['total_ns']['p50_ns']
+                   / reference['cpp_p50_ns'] - 1.0)
+        py_gap = (baseline['py']['total_ns']['p50_ns']
+                  / reference['py_p50_ns'] - 1.0)
         lines += [
-            f"The first row is the published configuration re-run at "
-            f"{meta['measured_frames']} frames, so it is also a check on the "
-            f"shorter runs the other rows use: the "
+            f"The first row is the published configuration measured again at "
+            f"{meta['measured_frames']} frames, which is also the check on the "
+            f"shorter runs every other row uses. The "
             f"{reference['frames']}-frame run in the table above gives "
             f"{reference['cpp_p50_ns'] / NS_PER_MS:.3f} ms and "
-            f"{reference['py_p50_ns'] / NS_PER_MS:.3f} ms at p50 for "
-            f"{reference['ratio_p50']:.2f}x, and this sweep gives "
+            f"{reference['py_p50_ns'] / NS_PER_MS:.3f} ms at p50, a ratio of "
+            f"{reference['ratio_p50']:.2f}x; this sweep gives "
             f"{baseline['cpp']['total_ns']['p50_ns'] / NS_PER_MS:.3f} ms and "
-            f"{baseline['py']['total_ns']['p50_ns'] / NS_PER_MS:.3f} ms for "
-            f"{baseline['ratio_p50']:.2f}x.",
+            f"{baseline['py']['total_ns']['p50_ns'] / NS_PER_MS:.3f} ms, a "
+            f"ratio of {baseline['ratio_p50']:.2f}x. The Python numbers agree "
+            f"to {abs(py_gap) * 100:.0f}% and the C++ numbers do not, by "
+            f"{abs(cpp_gap) * 100:.0f}%, on the same binary over the same "
+            f"corpus. Two runs of the same thing on this shared unpinned box "
+            f"differ by about that much: the repeat under threat T2 moves the "
+            f"same C++ figure by a comparable amount between its two runs, "
+            f"with the direction of the move not even consistent. So "
+            f"**compare rows within "
+            f"this table, not across to the headline**: every row here was "
+            f"taken by one script inside one window, and the curve is the "
+            f"comparison between them.",
             '',
         ]
 
@@ -763,9 +848,10 @@ def markdown_section(summary: dict) -> str:
         'Two constants set how much of the frame is bulk array work: '
         '`deproject.stride`, which divides the point count by its square, and '
         '`plane.iterations`, which divides the candidate count. Shrinking '
-        'either shrinks the RANSAC plane stage, which is the stage where '
-        'NumPy and Eigen reach comparable compiled loops, and leaves the '
-        'small-matrix stages where Python pays per call. Nothing else about '
+        'either shrinks the RANSAC plane stage, which is where Python spends '
+        'the frame inside compiled loops rather than in the interpreter, and '
+        'leaves untouched the small-matrix stages where it pays per call and '
+        'not per element. Nothing else about '
         'the pipeline changes: both implementations read the same derived '
         'config file, and the deviate table each configuration uses is a '
         'prefix of the committed one, so a 32-iteration run scores the first '
@@ -833,8 +919,12 @@ def markdown_section(summary: dict) -> str:
             f"for. Each row here re-chooses it by measurement over "
             f"{retuned[0]['block_calibration']['frames']} frames per "
             f"candidate, exactly the way the committed value was chosen, and "
-            f"the full curve is in `workload_sweep.json`. What holding it "
-            f"fixed would have cost:",
+            f"the full curve is in `workload_sweep.json`. The candidates stop "
+            f"at {BLOCK_INT16_LIMIT:,} points because above that the Python "
+            f"stage's own partial sum overflows and the answer changes, which "
+            f"the gate caught the first time this sweep reached for a larger "
+            f"block: threat T1 in [../docs/METHOD.md](../docs/METHOD.md) has "
+            f"the detail. What holding the block fixed would have cost:",
             '',
         ]
         for entry in retuned:
@@ -874,21 +964,49 @@ def markdown_section(summary: dict) -> str:
                 f"{100.0 * row['small_matrix_share_cpp']:.1f}% of the C++ one. "
                 f"Ratio {row['ratio_p50']:.2f}x at p50, "
                 f"{row['ratio_p99']:.2f}x at p99.")
-        if bail['not_graspable'] or bail['plane_not_found']:
-            note += (f" This row is not the same pipeline as the others: "
-                     f"{bail['plane_not_found']} of "
-                     f"{row['cpp']['total_ns']['n']} measured frames found no "
-                     f"plane and {bail['not_graspable']} found no cluster "
-                     f"holding `cluster.min_points`, so they stop at S4 and "
-                     f"never reach grasp synthesis, IK or the trajectory. "
-                     f"Subsampling that hard removes the object as well as the "
-                     f"cost, which is itself the answer to whether a stride "
-                     f"like this is free.")
+        samples = row['cpp']['total_ns']['n']
+        bailed = bail['not_graspable'] + bail['plane_not_found']
+        if bailed:
+            share = bailed / samples
+            where = []
+            if bail['plane_not_found']:
+                where.append(f"{bail['plane_not_found']} found no plane at S3")
+            if bail['not_graspable']:
+                where.append(f"{bail['not_graspable']} found no cluster "
+                             f"holding `cluster.min_points` at S4")
+            note += (f" {bailed} of {samples} measured samples bail out early "
+                     f"({' and '.join(where)}), so they never reach grasp "
+                     f"synthesis, IK or the trajectory.")
+            if share > 0.2:
+                note += (f" At {100.0 * share:.0f}% this row is mostly timing "
+                         f"a shorter pipeline than the others, and it is the "
+                         f"answer to whether a stride like this is free: "
+                         f"subsampling that hard takes the object out of the "
+                         f"cloud along with the cost.")
+            else:
+                note += (' The remainder run the whole pipeline, so the row is '
+                         'still comparable, with that fraction of cheaper '
+                         'samples in it.')
         lines.append(note)
 
     lines += block_paragraph()
 
     lines += [
+        '',
+        f"**Read the p50 column, not the p99 one.** Every configuration was "
+        f"measured {baseline['spread']['count']} times end to end, and the "
+        f"table publishes the first repeat rather than the flattering one. "
+        f"Across repeats the p50 ratio moved by at most "
+        f"{max(r['spread']['ratio_p50_range'] for r in rows):.2f}, which is "
+        f"{100.0 * max(r['spread']['ratio_p50_range'] / r['ratio_p50'] for r in rows):.0f}% "
+        f"of the row it happened on, while the p99 ratio moved by up to "
+        f"{max(r['spread']['ratio_p99_range'] for r in rows):.2f}, which is "
+        f"{100.0 * max(r['spread']['ratio_p99_range'] / r['ratio_p99'] for r in rows):.0f}% "
+        f"of its row. The shape "
+        f"of the curve is a property of the pipeline; the p99 column on this "
+        f"box is a property of what else the box was doing, which is threat "
+        f"T2 arriving exactly where it was predicted to. Per-repeat ratios and "
+        f"the load average before every run are in `workload_sweep.json`.",
         '',
         f"The p99 columns come from {meta['measured_frames']} samples over "
         f"{baseline['cpp']['distinct_frames']} distinct store frames, so the "
@@ -975,6 +1093,12 @@ def main(argv=None) -> int:
                              'it per configuration by measurement, an integer '
                              'holds it fixed. Only the Python side reads it '
                              'and it never changes output.')
+    parser.add_argument('--repeats', type=int, default=2,
+                        help='how many times each configuration is measured '
+                             'end to end. The first repeat is the published '
+                             'row and the spread across repeats is reported '
+                             'beside it, because on a shared box a single '
+                             'measurement cannot say whether it was disturbed.')
     parser.add_argument('--calibration-frames', type=int, default=40,
                         help='measured frames per block-size candidate')
     parser.add_argument('--calibration-warmup', type=int, default=30)
@@ -982,8 +1106,8 @@ def main(argv=None) -> int:
                         help='upper bound on block_points * iterations, so a '
                              'candidate cannot allocate a distance matrix no '
                              'sensible implementation would')
-    parser.add_argument('--results-md', type=Path,
-                        default=REPO_ROOT / 'results' / 'RESULTS.md',
+    parser.add_argument('--results-md', type=str,
+                        default=str(REPO_ROOT / 'results' / 'RESULTS.md'),
                         help='RESULTS.md to insert the section into; pass an '
                              'empty string to skip')
     parser.add_argument('--from-json', type=Path, default=None,
@@ -1002,7 +1126,7 @@ def main(argv=None) -> int:
         out_dir = Path(args.out_dir)
         write_csv(summary['configurations'], out_dir / 'workload_sweep.csv')
         plot(summary, out_dir / 'workload_sweep.png')
-        if str(args.results_md) and Path(args.results_md).is_file():
+        if args.results_md and Path(args.results_md).is_file():
             results_md = Path(args.results_md)
             results_md.write_text(
                 insert_section(results_md, markdown_section(summary)),
@@ -1110,7 +1234,7 @@ def main(argv=None) -> int:
     plot(summary, png_path)
     written = [json_path, csv_path, png_path]
 
-    if str(args.results_md):
+    if args.results_md:
         results_md = Path(args.results_md)
         if results_md.is_file():
             results_md.write_text(
