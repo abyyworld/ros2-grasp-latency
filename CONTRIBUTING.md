@@ -1,4 +1,7 @@
-# Working rules for this repository
+# Contributing
+
+Conventions this repository holds itself to. They are checked, not trusted:
+`tools/check_style.py` enforces the writing rules and CI runs it on every commit.
 
 ## What this repository is
 
