@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(grasp_core_cpp)
 
 # The pipeline itself is a plain CMake project under cpp/ with no ROS dependency
-# of any kind -- that independence is what lets the same binary be measured
+# of any kind, and that independence is what lets the same code be measured
 # in-process and inside a node. This package is only the ament shim that makes
 # grasp_core::grasp_core visible to colcon-built packages; it deliberately
 # contains no source of its own.

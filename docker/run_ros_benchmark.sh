@@ -2,7 +2,7 @@
 #
 # Run the rclcpp node and then the rclpy node against the same input, record
 # /grasp/latency from each, and convert both recordings into the timing JSONL
-# that docs/FORMATS.md defines -- so tools/analyse.py sees ROS runs and
+# that docs/FORMATS.md defines, so tools/analyse.py sees ROS runs and
 # in-process runs in exactly the same shape.
 #
 # The two nodes are run in turn, never together: with four cores, a concurrent

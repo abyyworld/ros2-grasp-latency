@@ -2,7 +2,7 @@
 //
 // Why this exists rather than just `ros2 bag play`: rosbag2 replays the bytes
 // it recorded, header stamp included, and offers no way to restamp on the way
-// out (checked against the Jazzy play verb -- there is --clock, --rate, --loop
+// out (checked against the Jazzy play verb: there is --clock, --rate, --loop
 // and --start-offset, but nothing that rewrites a message field). So under bag
 // play, `now - header.stamp` is the true latency plus the unknown, constant
 // offset between the bag's time origin and the moment playback started, and an

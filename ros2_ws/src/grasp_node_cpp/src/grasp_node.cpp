@@ -93,7 +93,7 @@ public:
     // Intrinsics are not needed per frame: grasp_core derives fx, fy, cx, cy
     // from pipeline_config.json rescaled by the image width, exactly as the
     // in-process benchmark does. So there is no message_filters synchroniser
-    // here -- CameraInfo is latched once purely to assert that the stream we
+    // here. CameraInfo is latched once purely to assert that the stream we
     // are fed agrees with the config, and the subscription is then dropped so
     // it costs nothing for the remaining frames. One subscription, one
     // callback, no pairing buffer, no waiting for a second topic.

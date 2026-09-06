@@ -6,7 +6,7 @@ between the two is only worth anything if both stop the clock in the same place:
   compute_ns    starts at subscription-callback entry, before any validation,
                 and stops immediately before JointTrajectory.publish(). It
                 includes turning ``msg.data`` into NumPy views and building the
-                outgoing message -- costs the in-process benchmark never pays,
+                outgoing message: costs the in-process benchmark never pays,
                 and precisely the rclpy overhead this repository is measuring.
   end_to_end_ns is the node clock at that same instant minus the depth header
                 stamp, so it also carries DDS transport, CDR deserialisation,

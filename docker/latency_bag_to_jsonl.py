@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn a recorded /grasp/latency bag into the timing JSONL of docs/FORMATS.md.
 
-The point of doing it this way round -- publish a message, record it with
-``ros2 bag record``, convert offline -- is that no file I/O and no Python
+The point of doing it this way round (publish a message, record it with
+``ros2 bag record``, convert offline) is that no file I/O and no Python
 subscriber sit anywhere near the node under measurement. The recorder is
 rosbag2's C++ one; this script never runs while a benchmark is running.
 
@@ -102,7 +102,7 @@ def main(argv=None) -> int:
             }
             # total_ns is the node's own compute, so it lines up with the
             # in-process benchmark. Everything ROS 2 adds ahead of the callback
-            # is the difference between end_to_end_ns and it -- but only when
+            # is the difference between end_to_end_ns and it, but only when
             # the stamp was written by a live publisher; see docs/ROS2.md.
             if any(gc):
                 row['gc'] = {'gen0': gc[0], 'gen1': gc[1], 'gen2': gc[2]}

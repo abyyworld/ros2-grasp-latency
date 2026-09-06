@@ -19,7 +19,7 @@ Every addition should be framed as a question with a measured answer.
    epoch. If a number could not be measured on this machine, say which machine
    it needs.
 3. **Prefer measured claims over adjectives.** "p99 of 4.1 ms" beats "fast".
-   Delete "robust", "efficient", "powerful", "seamless".
+   `tools/check_style.py` lists the quality-asserting words it rejects.
 4. **Publish unflattering results.** If Python turns out to be sufficient at
    30 Hz, that is the finding. The honesty is the point and it is the most
    distinctive thing about this work.

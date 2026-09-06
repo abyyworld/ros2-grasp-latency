@@ -6,7 +6,7 @@
 #
 #   stamp          header stamp of the depth image, set by whoever published the
 #                  frame. Under `ros2 bag play` this is the stamp baked into the
-#                  bag at record time and not a live clock reading -- read
+#                  bag at record time and not a live clock reading. Read
 #                  docs/ROS2.md before believing end_to_end_ns.
 #   end_to_end_ns  node clock at the instant the JointTrajectory is handed to
 #                  the publisher, minus stamp. Covers DDS transport,
