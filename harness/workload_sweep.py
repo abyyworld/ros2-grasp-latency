@@ -679,8 +679,12 @@ def markdown_section(summary: dict) -> str:
         if calibration.get('candidates') and \
                 calibration['chosen_block_points'] != committed_block:
             retuned.append(row)
-    if retuned:
-        lines += [
+
+    def block_paragraph() -> list[str]:
+        if not retuned:
+            return []
+        out = [
+            '',
             f"**The `py block` column is a knob that had to move.** "
             f"`implementation.ransac_block_points` is read only by the Python "
             f"plane stage, it changes memory traffic and never output, and its "
@@ -696,17 +700,17 @@ def markdown_section(summary: dict) -> str:
             f"fixed would have cost:",
             '',
         ]
-        for row in retuned:
-            calibration = row['block_calibration']
-            lines.append(
-                f"* {row['label']}: the Python plane stage runs at p50 "
+        for entry in retuned:
+            calibration = entry['block_calibration']
+            out.append(
+                f"* {entry['label']}: the Python plane stage runs at p50 "
                 f"{calibration['plane_p50_ns_at_committed'] / NS_PER_MS:.3f} ms "
                 f"with the committed {committed_block:,}-point block and "
                 f"{calibration['plane_p50_ns_at_chosen'] / NS_PER_MS:.3f} ms "
                 f"with the {calibration['chosen_block_points']:,}-point block "
                 f"this row uses. Reporting the first would have charged Python "
                 f"for a stale constant and called it a language cost.")
-        lines.append('')
+        return out
 
     lines += [
         f"**The ratio moves from {baseline['ratio_p50']:.2f}x at p50 when the "
@@ -740,6 +744,8 @@ def markdown_section(summary: dict) -> str:
                      f"large enough to grasp, so those frames stop before IK "
                      f"and this row times a shorter pipeline than the others.")
         lines.append(note)
+
+    lines += block_paragraph()
 
     lines += [
         '',
