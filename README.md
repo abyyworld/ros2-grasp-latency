@@ -139,10 +139,13 @@ mostly times a pipeline with no grasp synthesis, IK or trajectory in it:
 subsampling that hard takes the object out of the cloud along with the cost.
 At stride 4 the same thing happens to 15 of 500 samples.
 
-One more reading of the same point, from the resolution table. C++ at 848x480
-is p50 53.1 ms against 58.0 ms at 640x480, lower latency on more pixels,
-because the workspace crop leaves 212,576 points against 212,574. Cost tracks
-points surviving the crop, not pixels.
+One more reading of the same point, from the resolution table. 848x480 has a
+third more pixels than 640x480 and costs about the same in both languages,
+because the workspace crop leaves 212,576 points against 212,574. A wider
+sensor mode at the same focal length sees more table, not more object, and the
+crop throws the difference away. Cost tracks points surviving the crop, not
+pixels, which is why the resolution axis of the crossover is really a
+point-count axis.
 
 ## Plots
 
