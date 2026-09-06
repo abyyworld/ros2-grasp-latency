@@ -1,0 +1,19 @@
+# Pinned because a quoted latency number is only attributable if the stack is.
+#
+# numpy in particular is load-bearing twice over: it is the thing the Python
+# pipeline is being measured on, and the corpus is only byte-reproducible
+# because PCG64 and elementwise IEEE-754 ops are stable within a version. A
+# numpy release that changed a reduction order could shift a last-ULP value and
+# therefore a rounded millimetre in the depth frames.
+numpy==2.4.6
+scipy==1.17.1
+matplotlib==3.11.1
+
+# Reads and writes rosbag2 without a ROS installation, which is how the bag is
+# produced here.
+rosbags==0.11.5
+
+# Kinematics cross-check against the MJCF only. Not in any measured path.
+mujoco==3.12.0
+
+pytest==9.1.1
