@@ -5,20 +5,31 @@
   <version>0.1.0</version>
   <description>
     rclpy grasp node: same topics, same QoS and same measurement boundaries as
-    grasp_node_cpp, wrapping the Python pipeline at python/grasp_core. The pair
-    is the whole experiment.
+    grasp_node_cpp, wrapping the Python pipeline at python/grasp_core. A
+    managed node for the same reason the C++ one is, so that building the
+    pipeline is an observable transition rather than part of start-up. It has
+    no composable variant because rclpy has no component loader and no
+    intra-process transport, which is itself one of the findings.
   </description>
   <maintainer email="kenny09077@gmail.com">ros2-grasp-latency</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
+  <depend>lifecycle_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>trajectory_msgs</depend>
   <depend>grasp_msgs</depend>
   <depend>python3-numpy</depend>
 
   <!-- grasp_core is the repository's own Python package, installed with pip
-       into the image; see docker/Dockerfile. It is not on rosdistro. -->
+       into the image; see docker/Dockerfile. It is not on rosdistro, and the
+       node imports it inside on_configure so that a smoke_test run still
+       proves the ROS half works where it is absent. -->
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

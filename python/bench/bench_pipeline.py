@@ -119,6 +119,10 @@ def trajectory_checksum(result) -> str:
     block[:, 2 * dof:3 * dof] = result.accelerations
     block[:, 3 * dof] = result.times
     np.round(block, CHECKSUM_DECIMALS, out=block)
+    # -0.0 and +0.0 compare equal and hash differently, so fold the sign the
+    # way cpp/bench/bench_pipeline.cpp does. Adding zero is exact for every
+    # other value and turns -0.0 into +0.0 by the IEEE-754 addition rule.
+    np.add(block, 0.0, out=block)
     return hashlib.sha256(block.tobytes()).hexdigest()
 
 
@@ -137,7 +141,7 @@ def output_record(impl: str, frame: int, result) -> str:
         + ',"traj_checksum":"' + trajectory_checksum(result) + '"}')
 
 
-def timing_record(impl: str, dataset: str, row) -> str:
+def timing_record(impl: str, dataset: str, row, overhead_ns: int) -> str:
     (seq, frame, total, points, cluster_points, iterations,
      plane_found, graspable, converged, gen0, gen1, gen2) = row[:12]
     stages = row[12:]
@@ -154,7 +158,8 @@ def timing_record(impl: str, dataset: str, row) -> str:
         + ',"graspable":' + flag(graspable)
         + ',"converged":' + flag(converged)
         + ',"gc":{"gen0":' + str(gen0) + ',"gen1":' + str(gen1)
-        + ',"gen2":' + str(gen2) + '}}')
+        + ',"gen2":' + str(gen2) + '}'
+        + ',"timer_overhead_ns":' + str(overhead_ns) + '}')
 
 
 def percentiles(samples: np.ndarray) -> dict:
@@ -191,6 +196,7 @@ def main(argv=None) -> int:
     pipeline = GraspPipeline(str(args.config), str(args.chain),
                              str(args.ransac_table))
     timer = calibrate_timer_ns()
+    overhead = int(round(timer['median_ns']))
 
     frames = args.frames
     stages = np.zeros((frames, len(STAGE_KEYS)), dtype=np.int64)
@@ -247,6 +253,10 @@ def main(argv=None) -> int:
         row[2] = counts[2]
 
         if frame not in outputs:
+            # The pipeline is deterministic, so a frame seen twice produces the
+            # same answer. One line per frame of the store, in frame order, is
+            # what cpp/bench/bench_pipeline.cpp writes and what
+            # harness/compare_outputs.py reads.
             outputs[frame] = output_record(impl, frame, result)
     elapsed = time.time() - started
     counter.detach()
@@ -256,7 +266,7 @@ def main(argv=None) -> int:
         for seq in range(frames):
             row = (list(scalars[seq]) + list(flags[seq])
                    + list(collections[seq]) + list(stages[seq]))
-            handle.write(timing_record(impl, store.name, row) + '\n')
+            handle.write(timing_record(impl, store.name, row, overhead) + '\n')
 
     args.out_output.parent.mkdir(parents=True, exist_ok=True)
     with args.out_output.open('w', encoding='utf-8') as handle:

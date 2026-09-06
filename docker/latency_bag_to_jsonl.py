@@ -59,6 +59,12 @@ def main(argv=None) -> int:
     ap.add_argument('--out', required=True, type=Path)
     ap.add_argument('--impl', required=True,
                     help='value of the "impl" field, e.g. cpp or py')
+    ap.add_argument('--transport', default='ros2',
+                    help='value of the "transport" field. harness/analyze.py '
+                         'groups on (impl, dataset, transport), so this is what '
+                         'keeps an inter-process run, a composed run and a '
+                         'composed run with intra-process delivery apart. The '
+                         'in-process benchmark writes "inproc".')
     ap.add_argument('--dataset', required=True)
     ap.add_argument('--frame-count', required=True, type=int,
                     help='frames in the store, to map a sequence number back '
@@ -89,7 +95,7 @@ def main(argv=None) -> int:
             gc = [int(v) for v in m.gc_collections]
             row = {
                 'impl': args.impl,
-                'transport': 'ros2',
+                'transport': args.transport,
                 'dataset': args.dataset,
                 'frame': int(m.seq) % args.frame_count,
                 'seq': seq,
@@ -97,6 +103,10 @@ def main(argv=None) -> int:
                 'total_ns': int(m.compute_ns),
                 'end_to_end_ns': int(m.end_to_end_ns),
                 'stamp_ns': int(m.stamp.sec) * 1_000_000_000 + int(m.stamp.nanosec),
+                'points': int(m.points),
+                'cluster_points': int(m.cluster_points),
+                'ik_iterations': int(m.ik_iterations),
+                'plane_found': bool(m.plane_found),
                 'graspable': bool(m.graspable),
                 'converged': bool(m.converged),
             }
@@ -108,7 +118,7 @@ def main(argv=None) -> int:
                 row['gc'] = {'gen0': gc[0], 'gen1': gc[1], 'gen2': gc[2]}
             fh.write(json.dumps(row) + '\n')
 
-    print(f'{args.out}: {len(kept)} records '
+    print(f'{args.out}: {len(kept)} records [{args.transport}] '
           f'({len(records)} recorded, {args.warmup} warm-up discarded, '
           f'{dropped} lost in flight)', file=sys.stderr)
     if dropped:

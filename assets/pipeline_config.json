@@ -149,5 +149,29 @@
     "warmup_frames": 100,
     "measured_frames": 2000,
     "deadline_hz": 30.0
+  },
+
+  "analysis": {
+    "_comment": "Read by harness/analyze.py and harness/compare_outputs.py only. Here rather than in the harness so a published percentile can be traced to the definition that produced it.",
+    "percentiles": [50.0, 90.0, 95.0, 99.0, 99.9],
+    "percentile_method": "nearest",
+    "percentile_method_note": "Nearest observed sample, never interpolated between two. A latency that was never measured is not a latency, and at n = 2000 the p99.9 sits between the second and third slowest samples where interpolation would invent a value.",
+    "bootstrap_resamples": 2000,
+    "bootstrap_confidence": 0.95,
+    "bootstrap_seed": 20240906,
+    "equivalence_tolerance": 1e-6,
+    "equivalence_tolerance_note": "Absolute, in metres, radians or dimensionless matrix entries, matching docs/ALGORITHM.md. Far tighter than any physical effect and far looser than the 1e-15 noise from differing summation orders.",
+    "reference_dataset": "table_640x480",
+    "tail_percentile": 99.0,
+    "tail_percentile_note": "The percentile the garbage-collection attribution is run against: frames at or above it are the tail whose cause is in question."
+  },
+
+  "rate_sweep": {
+    "_comment": "harness/rate_sweep.py drives each implementation at these fixed control rates over the frame store, with absolute deadlines taken from a monotonic start.",
+    "rates_hz": [10.0, 30.0, 100.0, 250.0],
+    "jobs_per_rate": 200,
+    "warmup_jobs": 20,
+    "datasets": ["table_320x240", "table_640x480"],
+    "datasets_note": "Two resolutions, because the rate at which an implementation starts missing deadlines is a property of the pair and not of the language."
   }
 }

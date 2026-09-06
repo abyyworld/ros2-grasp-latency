@@ -1,0 +1,92 @@
+{
+  "left": {
+    "impl": "cpp",
+    "path": "results/cpp.table_640x480.output.jsonl"
+  },
+  "right": {
+    "impl": "py1t",
+    "path": "results/py1t.table_640x480.output.jsonl"
+  },
+  "frames_compared": 100,
+  "tolerance": 1e-06,
+  "agree": true,
+  "bail_points": {
+    "none": 100
+  },
+  "waypoint_amplification": 23.094006534665823,
+  "checksum_grid": 1e-09,
+  "checksum_quantisation_frames": [],
+  "fields": {
+    "plane_found": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "plane": {
+      "compared": 400,
+      "skipped": 0,
+      "worst_abs_deviation": 1.1789180742738381e-14,
+      "worst_frame": 94,
+      "mismatches": []
+    },
+    "graspable": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "width": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 9.43689570931383e-16,
+      "worst_frame": 25,
+      "mismatches": []
+    },
+    "tcp": {
+      "compared": 1600,
+      "skipped": 0,
+      "worst_abs_deviation": 3.8691272408186705e-14,
+      "worst_frame": 18,
+      "mismatches": []
+    },
+    "converged": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "iterations": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "q": {
+      "compared": 700,
+      "skipped": 0,
+      "worst_abs_deviation": 6.794564910705958e-14,
+      "worst_frame": 18,
+      "mismatches": []
+    },
+    "duration_s": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 1.4210854715202004e-14,
+      "worst_frame": 31,
+      "mismatches": []
+    },
+    "traj_checksum": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    }
+  },
+  "problems": []
+}

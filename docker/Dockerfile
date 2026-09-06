@@ -9,12 +9,23 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # common_interfaces. These are the additions the pipeline itself needs: Eigen
 # for the C++ core, NumPy/SciPy for the Python core, and both rosbag2 storage
 # plugins so a bag recorded on any machine can be replayed here.
+# The lifecycle, component and launch packages all arrive with ros-base, three
+# of them only transitively (rclcpp_components through rosbag2_transport,
+# ros2lifecycle through ros2cli_common_extensions). They are named again here
+# because this image will not build without them and a transitive dependency is
+# not a promise.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       cmake \
       libeigen3-dev \
       python3-numpy \
       python3-scipy \
       python3-pip \
+      python3-yaml \
+      ros-jazzy-lifecycle-msgs \
+      ros-jazzy-launch-ros \
+      ros-jazzy-rclcpp-components \
+      ros-jazzy-rclcpp-lifecycle \
+      ros-jazzy-ros2lifecycle \
       ros-jazzy-rosbag2-storage-mcap \
       ros-jazzy-rosbag2-storage-sqlite3 \
     && rm -rf /var/lib/apt/lists/*
@@ -27,7 +38,7 @@ WORKDIR /workspace
 
 # Copied piecemeal rather than as the whole tree: data/ holds a multi-gigabyte
 # frame store that is regenerated rather than shipped, and belongs on a bind
-# mount at run time (see docker/README.md).
+# mount at run time (see docs/ROS2.md).
 COPY assets/ /workspace/assets/
 COPY cpp/ /workspace/cpp/
 COPY python/ /workspace/python/

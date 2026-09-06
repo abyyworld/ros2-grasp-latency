@@ -43,5 +43,20 @@ uint64[8] stage_ns
 # region closes. Always zero from the C++ node.
 uint64[3] gc_collections
 
+# The shape of the frame's answer, so a ROS run's timing JSONL carries the same
+# columns docs/FORMATS.md fixes for an in-process run and the analysis needs no
+# special case for ROS records. These are outputs of the pipeline, not timings:
+# they are here because they are the only way to tell a run that was fast
+# because the machine was fast from one that was fast because the plane fit
+# gave up early.
+bool plane_found
 bool graspable
 bool converged
+
+# Points entering S3, that is after deprojection and the workspace crop.
+uint32 points
+uint32 cluster_points
+
+# Damped-least-squares iterations S6 took. Named ik_iterations rather than
+# iterations to match the timing JSONL key.
+uint32 ik_iterations

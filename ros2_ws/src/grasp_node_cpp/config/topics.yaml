@@ -1,0 +1,22 @@
+# Topic remaps, applied by the launch files in this package.
+#
+# The nodes subscribe and publish under short relative names, and the mapping
+# onto the names the bags and the driver actually use lives here. Keeping it
+# out of the source is what lets the same binary be pointed at a different
+# camera namespace without a rebuild, and keeping it in one file is what stops
+# the two implementations from drifting onto different topics and producing two
+# runs that never saw the same frame.
+#
+# docker/run_ros_benchmark.sh checks this file against
+# assets/pipeline_config.json:ros, which is what the bag writer used, and
+# against grasp_node_py/config/topics.yaml, which must be identical. The
+# frame_publisher section is carried in both copies for that reason; the
+# Python package has no frame publisher and its launch file ignores it.
+grasp_node:
+  depth/image_raw: /camera/depth/image_raw
+  depth/camera_info: /camera/depth/camera_info
+  joint_trajectory: /grasp/joint_trajectory
+  latency: /grasp/latency
+frame_publisher:
+  depth/image_raw: /camera/depth/image_raw
+  depth/camera_info: /camera/depth/camera_info

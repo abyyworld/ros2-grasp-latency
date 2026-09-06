@@ -1,0 +1,92 @@
+{
+  "left": {
+    "impl": "cpp",
+    "path": "results/cpp.table_320x240.output.jsonl"
+  },
+  "right": {
+    "impl": "py",
+    "path": "results/py.table_320x240.output.jsonl"
+  },
+  "frames_compared": 100,
+  "tolerance": 1e-06,
+  "agree": true,
+  "bail_points": {
+    "none": 100
+  },
+  "waypoint_amplification": 23.094006534665823,
+  "checksum_grid": 1e-09,
+  "checksum_quantisation_frames": [],
+  "fields": {
+    "plane_found": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "plane": {
+      "compared": 400,
+      "skipped": 0,
+      "worst_abs_deviation": 7.806255641895632e-15,
+      "worst_frame": 81,
+      "mismatches": []
+    },
+    "graspable": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "width": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 2.3592239273284576e-16,
+      "worst_frame": 37,
+      "mismatches": []
+    },
+    "tcp": {
+      "compared": 1600,
+      "skipped": 0,
+      "worst_abs_deviation": 6.999956170261612e-14,
+      "worst_frame": 2,
+      "mismatches": []
+    },
+    "converged": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "iterations": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "q": {
+      "compared": 700,
+      "skipped": 0,
+      "worst_abs_deviation": 7.72715225139109e-14,
+      "worst_frame": 2,
+      "mismatches": []
+    },
+    "duration_s": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 5.395683899678261e-14,
+      "worst_frame": 2,
+      "mismatches": []
+    },
+    "traj_checksum": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    }
+  },
+  "problems": []
+}

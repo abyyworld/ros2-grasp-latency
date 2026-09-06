@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from .config import DEPTH_DTYPE
-
 
 class Deprojector:
     """S1: depth image to `points_cam`, in row-major pixel order."""

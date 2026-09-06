@@ -1,0 +1,111 @@
+{
+  "impl": "py",
+  "dataset": "table_640x480",
+  "resolution": [
+    640,
+    480
+  ],
+  "store_frames": 100,
+  "warmup_frames": 100,
+  "measured_frames": 2000,
+  "wall_clock_s": 175.9883964061737,
+  "percentile_method": "nearest",
+  "total_ns": {
+    "p50_ns": 86904711.0,
+    "p95_ns": 96700444.0,
+    "p99_ns": 107194451.0
+  },
+  "stage_ns": {
+    "decode": {
+      "p50_ns": 10551.0,
+      "p95_ns": 16439.0,
+      "p99_ns": 48410.0
+    },
+    "deproject": {
+      "p50_ns": 10801846.0,
+      "p95_ns": 12087072.0,
+      "p99_ns": 13825392.0
+    },
+    "transform_crop": {
+      "p50_ns": 11007776.0,
+      "p95_ns": 12560600.0,
+      "p99_ns": 15438002.0
+    },
+    "plane": {
+      "p50_ns": 62280074.0,
+      "p95_ns": 70180159.0,
+      "p99_ns": 78077569.0
+    },
+    "cluster": {
+      "p50_ns": 595110.0,
+      "p95_ns": 913964.0,
+      "p99_ns": 1077119.0
+    },
+    "grasp": {
+      "p50_ns": 461386.0,
+      "p95_ns": 587950.0,
+      "p99_ns": 693651.0
+    },
+    "ik": {
+      "p50_ns": 1260282.0,
+      "p95_ns": 2340254.0,
+      "p99_ns": 4117226.0
+    },
+    "traj": {
+      "p50_ns": 56849.0,
+      "p95_ns": 93523.0,
+      "p99_ns": 121047.0
+    }
+  },
+  "gc_collections_total": [
+    1,
+    0,
+    0
+  ],
+  "gc_collections_per_100_frames": [
+    0.05,
+    0.0,
+    0.0
+  ],
+  "bail_outs": {
+    "plane_not_found": 0,
+    "not_graspable": 0,
+    "ik_not_converged": 0
+  },
+  "ik_iterations": {
+    "median": 9.0,
+    "max": 36
+  },
+  "points": {
+    "median": 212574.5
+  },
+  "timer": {
+    "samples": 4096,
+    "median_ns": 184.0,
+    "min_ns": 168,
+    "p99_ns": 277.0,
+    "resolution_ns": 1.0
+  },
+  "environment": {
+    "python": "3.11.15",
+    "numpy": "2.4.6",
+    "platform": "Linux-6.18.44-fc-v24-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "cpu_count": 4,
+    "load_average": [
+      3.875,
+      2.46923828125,
+      1.83154296875
+    ],
+    "blas_threads": {
+      "OPENBLAS_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "MKL_NUM_THREADS": null
+    }
+  },
+  "inputs": {
+    "config": "/home/user/ros2-grasp-latency/assets/pipeline_config.json",
+    "chain": "/home/user/ros2-grasp-latency/assets/franka/panda_chain.json",
+    "ransac_table": "/home/user/ros2-grasp-latency/assets/ransac_uniform.bin"
+  }
+}

@@ -4,10 +4,12 @@
   <name>grasp_node_cpp</name>
   <version>0.1.0</version>
   <description>
-    rclcpp grasp node: RGB-D depth in on /camera/depth/image_raw, JointTrajectory
-    out on /grasp/joint_trajectory, one GraspLatency record per frame on
-    /grasp/latency. Also ships frame_publisher, a live stand-in for the camera
-    that stamps at publish time so end-to-end latency is measurable.
+    rclcpp grasp node: RGB-D depth in, JointTrajectory out, one GraspLatency
+    record per frame. A managed node so that model loading is a transition
+    rather than an unobservable part of start-up, and a component so that it
+    can be loaded next to its driver and measured with intra-process delivery
+    on and off. Also ships frame_publisher, a live stand-in for the camera that
+    stamps at publish time so end-to-end latency is measurable.
   </description>
   <maintainer email="kenny09077@gmail.com">ros2-grasp-latency</maintainer>
   <license>Apache-2.0</license>
@@ -15,10 +17,21 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>lifecycle_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>trajectory_msgs</depend>
   <depend>grasp_msgs</depend>
   <depend>grasp_core_cpp</depend>
+
+  <!-- Launch only: the container executables live in rclcpp_components, the
+       launch actions in launch_ros, and the launch files read config/*.yaml
+       themselves so that the QoS profile and the remap table have one home. -->
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

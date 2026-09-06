@@ -163,10 +163,13 @@ class GraspPipeline:
         else:
             depth_image = np.frombuffer(depth, dtype=DEPTH_DTYPE).reshape(
                 height, width)
+        # The colour view is deliberately never read again: no stage of
+        # ALGORITHM.md S0 to S7 looks at colour. It is decoded because a node
+        # that subscribes to it has to decode it, and that cost is real.
         if isinstance(rgb, np.ndarray):
-            colour = rgb.reshape(height, width, _COLOUR_CHANNELS)
+            rgb.reshape(height, width, _COLOUR_CHANNELS)
         else:
-            colour = np.frombuffer(rgb, dtype=COLOUR_DTYPE).reshape(
+            np.frombuffer(rgb, dtype=COLOUR_DTYPE).reshape(
                 height, width, _COLOUR_CHANNELS)
         mark1 = clock()
 

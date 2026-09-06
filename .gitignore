@@ -10,3 +10,5 @@ data/
 *.db3
 .venv/
 CLAUDE.md
+results/*.timing.jsonl
+results/*.output.jsonl

@@ -1,0 +1,99 @@
+{
+  "left": {
+    "impl": "cpp",
+    "path": "results/cpp.table_848x480.output.jsonl"
+  },
+  "right": {
+    "impl": "py",
+    "path": "results/py.table_848x480.output.jsonl"
+  },
+  "frames_compared": 100,
+  "tolerance": 1e-06,
+  "agree": true,
+  "bail_points": {
+    "none": 100
+  },
+  "waypoint_amplification": 23.094006534665823,
+  "checksum_grid": 1e-09,
+  "checksum_quantisation_frames": [
+    {
+      "frame": 95,
+      "determinant_deviation": 4.96269692007445e-14,
+      "amplified": 1.146085551017653e-12,
+      "grid_half_step": 5e-10
+    }
+  ],
+  "fields": {
+    "plane_found": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "plane": {
+      "compared": 400,
+      "skipped": 0,
+      "worst_abs_deviation": 2.4730217873525362e-14,
+      "worst_frame": 22,
+      "mismatches": []
+    },
+    "graspable": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "width": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 1.1657341758564144e-15,
+      "worst_frame": 8,
+      "mismatches": []
+    },
+    "tcp": {
+      "compared": 1600,
+      "skipped": 0,
+      "worst_abs_deviation": 1.3855583347321954e-13,
+      "worst_frame": 2,
+      "mismatches": []
+    },
+    "converged": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "iterations": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    },
+    "q": {
+      "compared": 700,
+      "skipped": 0,
+      "worst_abs_deviation": 2.3081536681957004e-13,
+      "worst_frame": 2,
+      "mismatches": []
+    },
+    "duration_s": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 1.6076029396572267e-13,
+      "worst_frame": 2,
+      "mismatches": []
+    },
+    "traj_checksum": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "mismatches": []
+    }
+  },
+  "problems": []
+}
