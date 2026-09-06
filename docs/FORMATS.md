@@ -4,7 +4,7 @@ Three formats let a C++ binary, a Python process and an analysis script agree
 without any of them depending on the others. All are little-endian; the
 benchmark only ever runs on x86-64 and aarch64, and both are LE.
 
-## 1. Frame store — the recorded input
+## 1. Frame store: the recorded input
 
 Frames are **not committed**. `harness/make_dataset.py` regenerates them
 deterministically from a seed, so a 1.2 GB corpus stays out of the repository
@@ -43,7 +43,7 @@ measured path.
 A benchmark run of `measured_frames` cycles through the frame store, so the
 working set is the store's size rather than one frame sitting hot in L2.
 
-## 2. Latency records — `*.timing.jsonl`
+## 2. Latency records: `*.timing.jsonl`
 
 One JSON object per line, one line per frame, written **after** the run so file
 I/O never lands inside a measurement.
@@ -58,11 +58,11 @@ I/O never lands inside a measurement.
 ```
 
 `seq` counts measured frames (post-warm-up); `frame` indexes into the store.
-Python records additionally carry `"gc":{"gen0":n,"gen1":n,"gen2":n}` —
+Python records additionally carry `"gc":{"gen0":n,"gen1":n,"gen2":n}`,
 cumulative collection counts sampled at the end of the frame, which is what
 lets tail latency be attributed to garbage collection rather than guessed at.
 
-## 3. Pipeline outputs — `*.output.jsonl`
+## 3. Pipeline outputs: `*.output.jsonl`
 
 The equivalence check reads these. One line per frame, in frame order.
 

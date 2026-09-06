@@ -66,6 +66,9 @@ def main(argv=None) -> int:
     ap.add_argument('--warmup', type=int, default=0,
                     help='leading records to discard; seq is renumbered from 0 '
                          'across what remains, per docs/FORMATS.md')
+    ap.add_argument('--limit', type=int, default=0,
+                    help='keep at most this many records after warm-up, so an '
+                         'over-run driver still yields a fixed sample count')
     args = ap.parse_args(argv)
 
     records = read_records(args.bag, args.msg)
@@ -78,6 +81,8 @@ def main(argv=None) -> int:
         dropped = 0
 
     kept = [m for m in records if m.seq >= args.warmup]
+    if args.limit:
+        kept = kept[:args.limit]
 
     with args.out.open('w') as fh:
         for seq, m in enumerate(kept):

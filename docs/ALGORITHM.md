@@ -3,7 +3,7 @@
 Two implementations of the same pipeline only tell you something about the two
 *languages* if they are the same pipeline. This document is the contract. It
 specifies the output of each stage precisely enough that C++ and Python must
-agree numerically, while deliberately **not** specifying loop structure — each
+agree numerically, while deliberately **not** specifying loop structure. Each
 implementation is free to be idiomatic, because that is the comparison worth
 making.
 
@@ -51,7 +51,7 @@ far looser than the ~1e-15 noise from differing summation orders.
 
 ---
 
-## S0 — Decode
+## S0. Decode
 
 **In:** `depth_raw`, `H*W` bytes of little-endian `uint16` in millimetres.
 `rgb_raw`, `H*W*3` bytes of `uint8`.
@@ -60,7 +60,7 @@ far looser than the ~1e-15 noise from differing summation orders.
 This stage exists because it is real: `rclpy` hands you a `bytes` object and
 you pay to get an array out of it. It is measured, not skipped.
 
-## S1 — Deproject
+## S1. Deproject
 
 **In:** depth view, intrinsics `fx, fy, cx, cy` (rescaled from the reference
 resolution by `W / reference_width`), `stride`, `z_min_m`, `z_max_m`.
@@ -79,7 +79,7 @@ emit (x, y, z)
 Surviving points keep **row-major pixel order**. Order matters: it is what
 makes the RANSAC index table select the same points in both implementations.
 
-## S2 — Transform and crop
+## S2. Transform and crop
 
 **In:** `points_cam`, `T_base_cam`, workspace AABB.
 **Out:** `points_base`, `M x 3` float32, order preserved.
@@ -89,7 +89,7 @@ p_base = R_base_cam @ p_cam + t_base_cam
 keep iff  x_min <= x <= x_max  and  y_min <= y <= y_max  and  z_min <= z <= z_max
 ```
 
-## S3 — Plane removal (RANSAC)
+## S3. Plane removal (RANSAC)
 
 **In:** `points_base` (`M` points), the deviate table `u[0 .. 3*iterations)`.
 **Out:** `points_object`, the plane `(n, d)` with `n` unit and `n_z > 0`, and
@@ -127,7 +127,7 @@ eigenvalue (canonicalised per rule 3, then oriented so `n_z > 0`), and
 `dot(n, p) + d < inlier_threshold_m + clearance_m`. This takes out the table
 and everything under it in one comparison, leaving only what stands on it.
 
-## S4 — Cluster
+## S4. Cluster
 
 **In:** `points_object`, `voxel_size_m`, `min_points`.
 **Out:** the index set of one cluster, or empty.
@@ -140,11 +140,11 @@ Return the component holding the **most points** (not the most voxels). Ties
 break toward the lexicographically smallest `(kx, ky, kz)` in the component.
 If the best component has fewer than `min_points` points, return empty.
 
-*Implementations may differ freely here* — a dense grid with
-`scipy.ndimage.label`, or a hash map with BFS — as long as the returned index
+*Implementations may differ freely here*: a dense grid with
+`scipy.ndimage.label`, or a hash map with BFS, as long as the returned index
 set matches.
 
-## S5 — Grasp synthesis
+## S5. Grasp synthesis
 
 **In:** the cluster's points, the plane, gripper geometry.
 **Out:** `T_base_tcp` (4x4), `width`, `graspable`.
@@ -152,7 +152,7 @@ set matches.
 1. `c` = centroid of the cluster (float64).
 2. Eigendecompose the **2-D** covariance of the cluster's `(x, y)`. Canonicalise
    per rule 3. The **minor** axis `a2` (smaller eigenvalue) is the narrow
-   direction — the one the fingers close along.
+   direction, the one the fingers close along.
 3. `width` = extent of the cluster projected onto `a2`
    (`max - min`) plus `finger_clearance_m`.
    If `width > max_width_m`, return `graspable = false`.
@@ -172,13 +172,13 @@ set matches.
    p_tcp    = (c_x, c_y, z_grasp)
    ```
 
-## S6 — Inverse kinematics
+## S6. Inverse kinematics
 
 **In:** `T_base_tcp`, the chain from `assets/franka/panda_chain.json`.
 **Out:** `q` (7), `converged`, `iterations`.
 
 Damped least squares with a null-space pull toward `q_neutral`. Seeded from
-`q_neutral` **every frame** — not from the previous solution — so per-frame cost
+`q_neutral` **every frame**, not from the previous solution, so per-frame cost
 does not depend on tracking history and every frame is an independent sample.
 
 ```
@@ -202,7 +202,7 @@ for it in [0, max_iterations):
 FK uses Rodrigues' formula on each joint's axis; every Panda arm joint is
 revolute about its child frame's z, but nothing may assume that.
 
-## S7 — Trajectory
+## S7. Trajectory
 
 **In:** `q_neutral` (start), `q` (goal), joint velocity limits.
 **Out:** `waypoints` points, each with position, velocity and acceleration for
@@ -233,7 +233,7 @@ Timer overhead is calibrated and reported so it can be subtracted; see
 [METHOD.md](METHOD.md).
 
 A frame where `plane_found`, `graspable` or `converged` is false still produces
-a latency sample — bailing out early is a legitimate outcome with a legitimate
-cost — but it is excluded from the output-equivalence comparison beyond the
-point where it bailed, and the bail-out rate is reported alongside the
-percentiles.
+a latency sample, because bailing out early is a legitimate outcome with a
+legitimate cost, but it is excluded from the output-equivalence comparison
+beyond the point where it bailed, and the bail-out rate is reported alongside
+the percentiles.

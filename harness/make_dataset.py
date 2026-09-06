@@ -206,7 +206,6 @@ class Cylinder:
 class Scene:
     table: TablePlane
     objects: list
-    primary: int
     truth: dict
 
 
@@ -322,7 +321,7 @@ def sample_scene(rng: np.random.Generator, cfg: dict) -> Scene:
         "object_count": len(objects),
         "plane": [round(float(v), 9) for v in table.normal] + [round(table.d, 9)],
     }
-    return Scene(table=table, objects=objects, primary=0, truth=truth)
+    return Scene(table=table, objects=objects, truth=truth)
 
 
 # --------------------------------------------------------------------------
@@ -383,7 +382,7 @@ def render(cam: Camera, scene: Scene, rng: np.random.Generator, cfg: dict):
     light /= np.linalg.norm(light)
     ambient = shading["ambient"]
     palette = np.asarray(shading["albedo"], dtype=np.float64)
-    albedo = palette[np.clip(surface_id - 1, 0, len(palette) - 1) % len(palette)]
+    albedo = palette[(surface_id - 1) % len(palette)]
     lambert = np.clip(normals @ light, 0.0, 1.0)
     shade = ambient + (1.0 - ambient) * lambert
     rgb = np.clip(albedo * shade[:, None] * 255.0, 0.0, 255.0)
