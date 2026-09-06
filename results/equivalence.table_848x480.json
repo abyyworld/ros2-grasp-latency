@@ -14,14 +14,14 @@
     "none": 100
   },
   "waypoint_amplification": 23.094006534665823,
-  "checksum_grid": 1e-09,
-  "checksum_quantisation_frames": [],
+  "trajectory_block_length": 440,
   "fields": {
     "plane_found": {
       "compared": 100,
       "skipped": 0,
       "worst_abs_deviation": null,
       "worst_frame": -1,
+      "worst_index": -1,
       "mismatches": []
     },
     "plane": {
@@ -29,6 +29,15 @@
       "skipped": 0,
       "worst_abs_deviation": 8.874845303097345e-15,
       "worst_frame": 94,
+      "worst_index": 0,
+      "mismatches": []
+    },
+    "cluster_points": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "worst_index": -1,
       "mismatches": []
     },
     "graspable": {
@@ -36,6 +45,7 @@
       "skipped": 0,
       "worst_abs_deviation": null,
       "worst_frame": -1,
+      "worst_index": -1,
       "mismatches": []
     },
     "width": {
@@ -43,6 +53,7 @@
       "skipped": 0,
       "worst_abs_deviation": 1.27675647831893e-15,
       "worst_frame": 25,
+      "worst_index": -1,
       "mismatches": []
     },
     "tcp": {
@@ -50,6 +61,7 @@
       "skipped": 0,
       "worst_abs_deviation": 4.0190073491430667e-14,
       "worst_frame": 55,
+      "worst_index": 0,
       "mismatches": []
     },
     "converged": {
@@ -57,6 +69,7 @@
       "skipped": 0,
       "worst_abs_deviation": null,
       "worst_frame": -1,
+      "worst_index": -1,
       "mismatches": []
     },
     "iterations": {
@@ -64,6 +77,7 @@
       "skipped": 0,
       "worst_abs_deviation": null,
       "worst_frame": -1,
+      "worst_index": -1,
       "mismatches": []
     },
     "q": {
@@ -71,6 +85,7 @@
       "skipped": 0,
       "worst_abs_deviation": 6.306066779870889e-14,
       "worst_frame": 55,
+      "worst_index": 6,
       "mismatches": []
     },
     "duration_s": {
@@ -78,13 +93,15 @@
       "skipped": 0,
       "worst_abs_deviation": 4.39648317751562e-14,
       "worst_frame": 55,
+      "worst_index": -1,
       "mismatches": []
     },
-    "traj_checksum": {
-      "compared": 100,
+    "trajectory": {
+      "compared": 44000,
       "skipped": 0,
-      "worst_abs_deviation": null,
-      "worst_frame": -1,
+      "worst_abs_deviation": 6.10178574333986e-13,
+      "worst_frame": 55,
+      "worst_index": 107,
       "mismatches": []
     }
   },
