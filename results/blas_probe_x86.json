@@ -1,0 +1,22 @@
+{
+  "machine": {
+    "platform": "Linux-6.18.44-fc-v24-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "python": "3.11.15"
+  },
+  "blas": {
+    "name": "scipy-openblas",
+    "version": "0.3.31.188.0",
+    "detection_method": "pkgconfig",
+    "openblas_config": "OpenBLAS 0.3.31.188.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+    "numpy_version": "2.4.6"
+  },
+  "shape": {
+    "block_points": 512,
+    "candidates": 128,
+    "k": 4
+  },
+  "gflops_plane_shape": 23.498544025034615,
+  "gflops_1024_square": 27.16547517061875
+}
