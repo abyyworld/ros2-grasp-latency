@@ -20,8 +20,8 @@ DETERMINANT_TOLERANCE = 1e-9
 
 class GraspSynthesiser:
     __slots__ = ('_approach', '_depth', '_min_height', '_clearance',
-                 '_max_width', '_capacity', '_cluster', '_projected', 'tcp',
-                 'width')
+                 '_max_width', '_capacity', '_cluster', '_projected',
+                 '_wrist_reference', 'tcp', 'width')
 
     def __init__(self, grasp: dict):
         self._approach = np.array(grasp['approach_axis_base'], dtype=np.float64)
@@ -33,7 +33,21 @@ class GraspSynthesiser:
         self.tcp = np.zeros((4, 4), dtype=np.float64)
         self.tcp[3, 3] = 1.0
         self.tcp[:3, 2] = self._approach
+        self._wrist_reference = np.array([1.0, 0.0])
         self.width = 0.0
+
+    def set_wrist_reference(self, y_axis_at_neutral: np.ndarray) -> None:
+        """Horizontal part of the TCP y axis at q_neutral, normalised.
+
+        Supplied by the pipeline from one FK call at construction, because S5
+        needs it and has no chain of its own. Never recomputed per frame.
+        """
+        horizontal = np.array([y_axis_at_neutral[0], y_axis_at_neutral[1]])
+        norm = np.hypot(horizontal[0], horizontal[1])
+        if norm == 0.0:
+            raise ValueError('the TCP y axis at q_neutral is vertical, so it '
+                             'cannot disambiguate a horizontal closing axis')
+        self._wrist_reference = horizontal / norm
 
     def resize(self, capacity: int) -> None:
         self._capacity = capacity
@@ -67,6 +81,20 @@ class GraspSynthesiser:
         y_axis[0] = minor[0] / norm
         y_axis[1] = minor[1] / norm
         y_axis[2] = 0.0
+        # A parallel jaw closing along +y and along -y is the same grasp, so
+        # the sign is free. Rule 3 picks it from the eigenvector, which knows
+        # nothing about the arm; folding it toward the wrist's rest
+        # orientation instead caps the demanded wrist rotation at 90 degrees
+        # and names the identical grasp.
+        reference = self._wrist_reference
+        alignment = y_axis[0] * reference[0] + y_axis[1] * reference[1]
+        if alignment < 0.0:
+            y_axis[0] = -y_axis[0]
+            y_axis[1] = -y_axis[1]
+        elif alignment == 0.0 and (y_axis[0] < 0.0
+                                   or (y_axis[0] == 0.0 and y_axis[1] < 0.0)):
+            y_axis[0] = -y_axis[0]
+            y_axis[1] = -y_axis[1]
         x_axis = tcp[:3, 0]
         x_axis[:] = np.cross(y_axis, self._approach)
         # det([x y z]) is the triple product x . (y x z), and y x z is the

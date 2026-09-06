@@ -53,6 +53,16 @@ struct Pipeline::Impl
       translation(r) = config.camera.T_base_cam[static_cast<std::size_t>(4 * r + 3)];
     }
     result.trajectory.resize(static_cast<std::size_t>(config.trajectory.waypoints));
+
+    // The wrist's rest orientation, used in S5 to pick which of the two
+    // equivalent closing-axis signs to report. Computed once, here, because
+    // it is a property of the chain and never of a frame.
+    const Eigen::Matrix4d neutral = fk_tcp(chain, chain.q_neutral.data());
+    y_reference = Eigen::Vector2d(neutral(0, 1), neutral(1, 1));
+    const double horizontal = y_reference.norm();
+    if (horizontal > 0.0) {
+      y_reference /= horizontal;
+    }
   }
 
   void reserve(int width, int height);
@@ -67,6 +77,7 @@ struct Pipeline::Impl
 
   Eigen::Matrix3d rotation{Eigen::Matrix3d::Identity()};
   Eigen::Vector3d translation{Eigen::Vector3d::Zero()};
+  Eigen::Vector2d y_reference{Eigen::Vector2d::Zero()};
 
   // Intrinsics for the reserved resolution, rescaled from the reference
   // stream. Recomputed on reserve() rather than per frame: a division that
@@ -269,6 +280,19 @@ const Result & Pipeline::run(
       cfg.grasp.approach_axis_base[2]);
     Eigen::Vector3d y_tcp(minor(0), minor(1), 0.0);
     y_tcp.normalize();
+
+    // A parallel-jaw gripper is symmetric about its closing axis, so +y and -y
+    // name the same physical grasp. Rule 3 canonicalises the eigenvector
+    // against its own components, which knows nothing about the arm and can
+    // demand up to half a turn of joint 7. Folding toward the wrist's rest
+    // orientation caps the demanded yaw at a quarter turn and changes which of
+    // two equivalent frames is reported, not what is grasped.
+    const double alignment = y_tcp.x() * s.y_reference.x() + y_tcp.y() * s.y_reference.y();
+    if (alignment < 0.0) {
+      y_tcp = -y_tcp;
+    } else if (alignment == 0.0 && (y_tcp.x() < 0.0 || (y_tcp.x() == 0.0 && y_tcp.y() < 0.0))) {
+      y_tcp = -y_tcp;
+    }
     const Eigen::Vector3d x_tcp = y_tcp.cross(z_tcp);
 
     Eigen::Matrix3d basis;

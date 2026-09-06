@@ -65,7 +65,7 @@ class PlaneRemover:
         self._points[:, 3] = 1.0
         self._signed = np.empty(capacity, dtype=np.float64)
         self._mask = np.empty(capacity, dtype=np.bool_)
-        self._inliers = np.empty((capacity, 4), dtype=np.float64)
+        self._inliers = np.empty((capacity, 3), dtype=np.float64)
         self._centred = np.empty((capacity, 3), dtype=np.float64)
         self._objects = np.empty((capacity, 3), dtype=np.float64)
 
@@ -160,11 +160,14 @@ class PlaneRemover:
         np.less(np.abs(signed, out=signed), threshold, out=mask)
 
         count = int(np.count_nonzero(mask))
+        # Gather the inliers into their own three columns rather than carrying
+        # the homogeneous one through the covariance: the fourth column is a
+        # third more traffic in every pass that follows, for a constant 1.
         inliers = self._inliers[:count]
-        np.compress(mask, homogeneous, axis=0, out=inliers)
-        centroid = inliers[:, :3].mean(axis=0)
+        np.compress(mask, homogeneous[:, :3], axis=0, out=inliers)
+        centroid = inliers.mean(axis=0)
         centred = self._centred[:count]
-        np.subtract(inliers[:, :3], centroid, out=centred)
+        np.subtract(inliers, centroid, out=centred)
         _, vectors = np.linalg.eigh((centred.T @ centred) / count)
         canonicalise_columns(vectors)
         normal = vectors[:, 0]

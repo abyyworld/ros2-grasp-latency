@@ -64,7 +64,8 @@
     "position_tolerance_m": 0.0005,
     "orientation_tolerance_rad": 0.005,
     "damping": 0.05,
-    "nullspace_gain": 0.1,
+    "nullspace_gain": 0.0,
+    "nullspace_note": "Measured, not guessed. At 0.1 the solver converged on 0 of 100 real grasp targets: the projector I - J^T (J J^T + lambda^2 I)^-1 J is not a true null-space projector while lambda > 0, so the bias leaks into task space and parks the orientation error at about 198 mrad. With a genuine pseudo-inverse projector it converges but costs an SVD per iteration. Seeded from q_neutral every frame the solution already sits near the neutral posture, so the bias buys nothing here and the term is off. See docs/METHOD.md.",
     "max_step_rad": 0.2
   },
 

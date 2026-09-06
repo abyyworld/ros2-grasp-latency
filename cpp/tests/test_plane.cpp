@@ -1,6 +1,7 @@
 // S3 against a synthetic scene whose plane is known exactly: a tilted table
 // with a box standing on it and a scatter of far-off outliers.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -73,9 +74,11 @@ void test_finds_a_known_plane(const Config & config, const std::vector<double> &
   fitter.run(points.data(), total, plane, found, kept.data(), kept_count);
 
   CHECK(found);
-  CHECK_NEAR(plane[0], nx, 1e-4);
-  CHECK_NEAR(plane[1], ny, 1e-4);
-  CHECK_NEAR(plane[2], nz, 1e-4);
+  // Stated as an angle rather than per component: the fixture carries 2 mm of
+  // peak-to-peak noise over a 0.4 m patch, so the normal is recoverable to
+  // fractions of a milliradian and no better.
+  const double cosine = plane[0] * nx + plane[1] * ny + plane[2] * nz;
+  CHECK(std::acos(std::min(1.0, cosine)) < 1e-3);
   CHECK_NEAR(plane[3], d, 1e-4);
   CHECK(plane[2] > 0.0);
   CHECK_NEAR(std::sqrt(

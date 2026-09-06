@@ -216,11 +216,22 @@ for it in [0, max_iterations):
           J_v[:, i] = cross(z_i, p_tcp - o_i)
           J_w[:, i] = z_i                        # z_i, o_i in base frame
     dq  = J^T @ solve(J @ J^T + damping^2 * I6, [e_p; e_r])
-    N   = I7 - J^T @ solve(J @ J^T + damping^2 * I6, J)   # null-space projector
-    dq += nullspace_gain * (N @ (q_neutral - q))
     dq  = clamp(dq, -max_step_rad, +max_step_rad)         # elementwise
     q   = clamp(q + dq, joint_lower, joint_upper)
 ```
+
+**On the missing null-space term.** An earlier version of this spec added
+`nullspace_gain * (I - J^T (J J^T + damping^2 I)^-1 J) @ (q_neutral - q)` to
+bias the redundant seventh degree of freedom toward the neutral posture. That
+matrix is not a null-space projector while `damping > 0`, so the bias leaked
+into task space and the solver stalled at a fixed point outside tolerance: **0
+of 100 real grasp targets converged**, with orientation error parked around
+198 mrad. A true pseudo-inverse projector does converge, but costs an SVD per
+iteration. Since every frame is seeded from `q_neutral` the solution already
+sits near the neutral posture, so the term earned nothing and
+`nullspace_gain` defaults to `0`. With it off and the S5 wrist fold in place,
+**100 of 100 targets converge in a median of 9 iterations**, worst-case
+position error 0.495 mm. [METHOD.md](METHOD.md) has the sweep.
 
 FK uses Rodrigues' formula on each joint's axis; every Panda arm joint is
 revolute about its child frame's z, but nothing may assume that.

@@ -104,6 +104,10 @@ class GraspPipeline:
         self._grasp = GraspSynthesiser(config['grasp'])
         self._ik = IKSolver(chain, config['ik'])
         self._planner = TrajectoryPlanner(config['trajectory'], chain)
+        # S5 resolves the closing-axis sign against the wrist's rest
+        # orientation, which is one FK call and belongs out here, at
+        # construction, where determinism rule 5 wants it.
+        self._grasp.set_wrist_reference(self._ik.forward(chain.q_neutral)[:3, 1])
 
         self._shape = None
         result = GraspResult()
