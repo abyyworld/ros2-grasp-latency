@@ -346,14 +346,8 @@ at the end on purpose: if the two implementations disagree, every latency number
 below that line is a comparison between two different programs, so the run
 stops.
 
-**One unit test currently fails and `run_all.sh` stops on it.**
-`tests/test_dataset.py::test_manifest_shape` asserts the old intrinsics
-rescaling rule, that all four intrinsics scale by `width / reference_width`,
-while the dataset generator follows the rule the config now states, where the
-principal point is recentred on the new image. The test expects `cy = 119.75`
-at 320x240 and the generator produces 119.5, which is `(240 - 1) / 2`. As of
-this writing: 6 of 6 C++ tests pass, 52 of 53 Python tests pass, and that is
-the one. The stages can be run individually in the meantime:
+The suites are 6 of 6 C++ tests and 66 of 66 Python tests. The stages can also
+be run individually:
 
 ```bash
 ./cpp/build/bench_pipeline --dataset data/table_640x480 \
