@@ -452,7 +452,31 @@ they are plotted against: **the share of the frame that is one large array
 reduction predicts the ratio better than the choice of language does, and the
 single headline ratio is one point on that curve.**
 
-## T2. Four shared vCPUs, no pinning, no isolation
+## T2. Four shared vCPUs, no isolation, and 9 percent of unexplained spread
+
+**What was ruled out, by measurement rather than by argument.** The same binary
+on the same corpus measured p50 between 47.7 and 58.1 ms across one session,
+about 20 percent, with no matching signal in the load average. Four candidate
+explanations were tested:
+
+| candidate | test | result |
+|---|---|---|
+| Hypervisor steal | `/proc/stat` steal ticks over the run | **0.00 percent.** Not steal. |
+| Run length | 250, 500 and 2000 frames, twice each | All in one band. Not run length. |
+| Memory-bandwidth contention | three-core stressor, both implementations | Both move 1.04x, ratio unchanged. Not contention. |
+| Scheduler migration | `taskset -c 2` against unpinned, three reps each | Spread falls from 14.9 to 8.9 percent. **Partly this.** |
+
+So pinning removes about a third of the spread and roughly 9 percent remains
+unexplained. The governor is not exposed in this container, so frequency
+scaling could not be tested or fixed. The honest position is that this machine
+supports two significant figures on an absolute latency, and that a ratio taken
+inside one measurement window is worth more than either number in it.
+
+`harness/run_all.sh` honours `GRASP_PIN`, which prefixes every benchmark with
+`taskset -c` on the given CPU. It is off by default because pinning every run
+to one core is wrong on a machine where somebody else may own that core, and
+because the reduction it buys is real but partial.
+
 
 The machine in [TOOLCHAIN.md](TOOLCHAIN.md) is a four-vCPU shared instance.
 There is no CPU pinning, no `isolcpus`, no `nohz_full`, no real-time priority

@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+
+# Optional CPU pinning. Scheduler migration accounts for about a third of the
+# run-to-run spread on the machine in docs/TOOLCHAIN.md (14.9 percent unpinned
+# against 8.9 percent pinned, three reps each), so GRASP_PIN=2 prefixes every
+# benchmark with `taskset -c 2`. Off by default: pinning to a fixed core is the
+# wrong default on a box where another tenant may own it. See METHOD.md T2.
+PIN=()
+[ -n "${GRASP_PIN:-}" ] && PIN=(taskset -c "$GRASP_PIN")
 # The whole experiment, in the order the conclusions depend on.
 #
 # Corpora, then the C++ build, then both pipelines at every resolution, then
@@ -106,12 +114,12 @@ step "benchmarks: $FRAMES measured frames after $WARMUP warm-up, per run"
 for entry in $DATASETS; do
   name="${entry%%:*}"
   printf '\n    --- %s ---\n' "$name" >&2
-  ./"$BUILD_DIR"/bench_pipeline \
+  "${PIN[@]}" ./"$BUILD_DIR"/bench_pipeline \
     --dataset "$DATA_DIR/$name" \
     --out-timing "$OUT_DIR/cpp.$name.timing.jsonl" \
     --out-output "$OUT_DIR/cpp.$name.output.jsonl" \
     --warmup "$WARMUP" --frames "$FRAMES"
-  python3 python/bench/bench_pipeline.py \
+  "${PIN[@]}" python3 python/bench/bench_pipeline.py \
     --dataset "$DATA_DIR/$name" \
     --out-timing "$OUT_DIR/py.$name.timing.jsonl" \
     --out-output "$OUT_DIR/py.$name.output.jsonl" \
@@ -134,7 +142,7 @@ if [ "${SKIP_ONE_THREAD:-0}" = "1" ] || [ "$reference_benchmarked" = "0" ]; then
 else
   printf '\n    --- %s, BLAS pinned to one thread ---\n' "$REFERENCE" >&2
   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-    python3 python/bench/bench_pipeline.py \
+    "${PIN[@]}" python3 python/bench/bench_pipeline.py \
       --dataset "$DATA_DIR/$REFERENCE" \
       --out-timing "$OUT_DIR/py1t.$REFERENCE.timing.jsonl" \
       --out-output "$OUT_DIR/py1t.$REFERENCE.output.jsonl" \

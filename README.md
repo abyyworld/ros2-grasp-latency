@@ -51,13 +51,22 @@ workload sweep below measures that directly, and the ratio moves from 0.7x to
 
 **Do not read the absolutes to three significant figures.** The same binary on
 the same corpus measured p50 between 47.7 and 58.1 ms across runs in one
-session, about 20 percent, with no matching signal in the load average. Run
-length is not the cause, which was tested at 250, 500 and 2000 frames. A
-controlled three-core memory-bandwidth stressor moves both implementations by
-the same 1.04x and leaves the ratio unchanged, so contention is not the cause
-either. The source of the remaining variance was not isolated, and the honest
-reading is that this shared vCPU supports two significant figures and a ratio
-measured inside one window, not more.
+session, about 20 percent, with no matching signal in the load average. Four
+candidates were tested rather than argued about:
+
+| candidate | test | result |
+| :--- | :--- | :--- |
+| hypervisor steal | steal ticks in `/proc/stat` | 0.00 percent, not this |
+| run length | 250, 500, 2000 frames, twice each | all one band, not this |
+| memory-bandwidth contention | three-core stressor | both move 1.04x, ratio unchanged, not this |
+| scheduler migration | `taskset -c 2` against unpinned | spread 14.9 to 8.9 percent, **partly this** |
+
+Pinning removes about a third of it and roughly 9 percent remains unexplained;
+the CPU governor is not exposed in this container so frequency scaling could
+not be tested. `GRASP_PIN=2 harness/run_all.sh` pins if you want the tighter
+number. The honest reading is that this machine supports two significant
+figures on an absolute, and a ratio taken inside one window is worth more than
+either number in it.
 
 **The C++ number is also a flag choice.** The table uses the pinned
 `-O2 -DNDEBUG`. Rebuilt with `-O3 -march=native` the same C++ runs its plane
