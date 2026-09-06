@@ -27,8 +27,8 @@
     "plane": {
       "compared": 400,
       "skipped": 0,
-      "worst_abs_deviation": 7.806255641895632e-15,
-      "worst_frame": 81,
+      "worst_abs_deviation": 4.073130721593543e-15,
+      "worst_frame": 94,
       "mismatches": []
     },
     "graspable": {
@@ -41,14 +41,14 @@
     "width": {
       "compared": 100,
       "skipped": 0,
-      "worst_abs_deviation": 2.3592239273284576e-16,
-      "worst_frame": 37,
+      "worst_abs_deviation": 1.942890293094024e-16,
+      "worst_frame": 96,
       "mismatches": []
     },
     "tcp": {
       "compared": 1600,
       "skipped": 0,
-      "worst_abs_deviation": 6.999956170261612e-14,
+      "worst_abs_deviation": 1.63202784619898e-14,
       "worst_frame": 2,
       "mismatches": []
     },
@@ -69,15 +69,15 @@
     "q": {
       "compared": 700,
       "skipped": 0,
-      "worst_abs_deviation": 7.72715225139109e-14,
+      "worst_abs_deviation": 3.362587985833443e-14,
       "worst_frame": 2,
       "mismatches": []
     },
     "duration_s": {
       "compared": 100,
       "skipped": 0,
-      "worst_abs_deviation": 5.395683899678261e-14,
-      "worst_frame": 2,
+      "worst_abs_deviation": 3.9968028886505635e-15,
+      "worst_frame": 68,
       "mismatches": []
     },
     "traj_checksum": {

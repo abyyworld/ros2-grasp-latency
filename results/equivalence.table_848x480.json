@@ -15,14 +15,7 @@
   },
   "waypoint_amplification": 23.094006534665823,
   "checksum_grid": 1e-09,
-  "checksum_quantisation_frames": [
-    {
-      "frame": 95,
-      "determinant_deviation": 4.96269692007445e-14,
-      "amplified": 1.146085551017653e-12,
-      "grid_half_step": 5e-10
-    }
-  ],
+  "checksum_quantisation_frames": [],
   "fields": {
     "plane_found": {
       "compared": 100,
@@ -34,8 +27,8 @@
     "plane": {
       "compared": 400,
       "skipped": 0,
-      "worst_abs_deviation": 2.4730217873525362e-14,
-      "worst_frame": 22,
+      "worst_abs_deviation": 8.874845303097345e-15,
+      "worst_frame": 94,
       "mismatches": []
     },
     "graspable": {
@@ -48,15 +41,15 @@
     "width": {
       "compared": 100,
       "skipped": 0,
-      "worst_abs_deviation": 1.1657341758564144e-15,
-      "worst_frame": 8,
+      "worst_abs_deviation": 1.27675647831893e-15,
+      "worst_frame": 25,
       "mismatches": []
     },
     "tcp": {
       "compared": 1600,
       "skipped": 0,
-      "worst_abs_deviation": 1.3855583347321954e-13,
-      "worst_frame": 2,
+      "worst_abs_deviation": 4.0190073491430667e-14,
+      "worst_frame": 55,
       "mismatches": []
     },
     "converged": {
@@ -76,15 +69,15 @@
     "q": {
       "compared": 700,
       "skipped": 0,
-      "worst_abs_deviation": 2.3081536681957004e-13,
-      "worst_frame": 2,
+      "worst_abs_deviation": 6.306066779870889e-14,
+      "worst_frame": 55,
       "mismatches": []
     },
     "duration_s": {
       "compared": 100,
       "skipped": 0,
-      "worst_abs_deviation": 1.6076029396572267e-13,
-      "worst_frame": 2,
+      "worst_abs_deviation": 4.39648317751562e-14,
+      "worst_frame": 55,
       "mismatches": []
     },
     "traj_checksum": {

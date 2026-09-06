@@ -492,7 +492,7 @@ def measure_nullspace(results: Path, data_root: Path) -> dict:
             settings = dict(base, damping=damping, nullspace_gain=gain)
             solver = IKSolver(chain, settings)
             converged, iterations = 0, []
-            worst_position, worst_orientation = 0.0, 0.0
+            position_error, orientation_error = [], []
             for target in targets:
                 ok = solver.solve(target)
                 converged += int(ok)
@@ -507,10 +507,10 @@ def measure_nullspace(results: Path, data_root: Path) -> dict:
                 rotation = 0.5 * np.array([product[1, 2] - product[2, 1],
                                            product[2, 0] - product[0, 2],
                                            product[0, 1] - product[1, 0]])
-                worst_position = max(worst_position,
-                                     float(np.linalg.norm(offset)))
-                worst_orientation = max(worst_orientation,
-                                        float(np.linalg.norm(rotation)))
+                position_error.append(float(np.linalg.norm(offset)))
+                orientation_error.append(float(np.linalg.norm(rotation)))
+            position_error = np.array(position_error)
+            orientation_error = np.array(orientation_error)
             sweep.append({
                 'damping': damping,
                 'nullspace_gain': gain,
@@ -518,8 +518,19 @@ def measure_nullspace(results: Path, data_root: Path) -> dict:
                 'converged': converged,
                 'median_iterations': (None if not iterations
                                       else int(np.median(iterations))),
-                'worst_position_error_m': worst_position,
-                'worst_orientation_error_rad': worst_orientation,
+                'worst_position_error_m': float(position_error.max()),
+                'worst_position_target': int(position_error.argmax()),
+                'worst_orientation_error_rad': float(orientation_error.max()),
+                'worst_orientation_target': int(orientation_error.argmax()),
+                # Which targets the solver did not place inside the tolerance,
+                # named rather than counted: the interesting question about a
+                # configuration that fails on one target is whether it is the
+                # same target every time.
+                'failed_targets': [
+                    int(i) for i in np.nonzero(
+                        (position_error >= base['position_tolerance_m'])
+                        | (orientation_error >= base['orientation_tolerance_rad'])
+                    )[0]],
             })
 
     report = {
