@@ -64,26 +64,66 @@ lets tail latency be attributed to garbage collection rather than guessed at.
 
 ## 3. Pipeline outputs: `*.output.jsonl`
 
-The equivalence check reads these. One line per frame, in frame order.
+The equivalence check reads these. One line per **distinct** frame of the
+store, in frame order: the pipeline is deterministic, so a frame the benchmark
+cycles past twice is recorded once. These files are not committed
+(`results/*.output.jsonl` is gitignored), which is what lets a line carry every
+number the gate compares rather than a summary of them.
 
 ```json
 {"impl":"cpp","frame":0,
  "plane_found":true,"plane":[0.0,0.0,1.0,-0.0021],
+ "cluster_points":892,
  "graspable":true,"width":0.0551,
  "tcp":[ ... 16 row-major doubles ... ],
  "converged":true,"iterations":14,
  "q":[0.113,-0.842,-0.097,-2.401,0.058,1.612,0.702],
  "duration_s":1.83,
- "traj_checksum":"sha256 of the waypoint block, see below"}
+ "trajectory":[ ... waypoints * (3 * dof + 1) doubles ... ]}
 ```
 
-`traj_checksum` is the SHA-256 of every waypoint's 21 doubles plus its
-`time_from_start`, each serialised as its IEEE-754 bit pattern in little-endian
-order, positions then velocities then accelerations then time, waypoint by
-waypoint. Comparing 20x22 doubles per frame across 2000 frames as text would
-dwarf the useful output; comparing a digest catches any divergence just as
-well. Because the two implementations only agree to `1e-6`, the checksum is
-taken over values **rounded to 9 decimal places** first.
+`trajectory` is the whole waypoint block, flattened in the order
+[ALGORITHM.md](ALGORITHM.md) S7 generates it: for each waypoint in turn, `dof`
+positions, then `dof` velocities, then `dof` accelerations, then
+`time_from_start`. Its length is `trajectory.waypoints * (3 * dof + 1)` from
+the config and the chain, and the gate rejects a file whose lines disagree with
+that rather than comparing the part that happens to line up. At the shipped
+20 waypoints and 7 joints that is 440 doubles, about 10 kB of a line and about
+1 MB of a hundred-frame file.
+
+### Why the block and not a digest of it
+
+This field used to be `traj_checksum`, a SHA-256 over the same values rounded
+to nine decimal places. Rounding is an **equality** test on a grid, and the two
+implementations are only ever known to agree to a **tolerance**: with about
+44,000 waypoint doubles per corpus differing by around 1e-13 against a 1e-9
+grid, a value landing within 1e-13 of a grid boundary rounds one way in one
+implementation and the other way in the other, and one flipped digit fails the
+gate on two answers that agree to twelve orders of magnitude better than
+required. That is not a hypothetical: `table_848x480` frame 95 did it, until a
+corpus regeneration happened to move the value off the boundary.
+
+A digest also cannot report *how far apart* two runs are, which is the only
+thing worth printing about two implementations that will never be bit
+identical. Emitting the values costs a megabyte of a file nobody commits and
+lets `harness/compare_outputs.py` hold every waypoint to the same 1e-6
+tolerance it holds the pose and the joints to, and report the worst deviation
+and where it landed.
+
+### Which fields a frame carries
+
+The spec, not the implementation, says when a field means anything.
+`harness/compare_outputs.py` gates on exactly this and skips nothing else:
+
+| Field | Defined when |
+|---|---|
+| `plane_found`, `cluster_points`, `graspable`, `converged` | always; a false or a zero is an answer |
+| `plane` | `plane_found` (S3) |
+| `width`, `tcp` | `cluster_points > 0` (S5 needs a cluster) |
+| `iterations`, `q`, `duration_s`, `trajectory` | always: S6 and S7 run on every frame with a cluster whatever `graspable` says, and S6/S7 state what they hold when there is no cluster (`q_neutral`, 0 iterations, a zero trajectory of zero duration) |
+
+Where a field is not defined, both runners still emit the slot, and what sits
+in it is whatever the implementation left there. Nothing may read it.
 
 Doubles are written with 17 significant digits (`%.17g`) so a round trip
 through JSON is lossless.

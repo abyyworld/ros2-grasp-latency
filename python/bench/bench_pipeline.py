@@ -234,7 +234,6 @@ def main(argv=None) -> int:
     scalars = np.zeros((frames, 6), dtype=np.int64)
     flags = np.zeros((frames, 3), dtype=np.bool_)
     collections = np.zeros((frames, 3), dtype=np.int64)
-    outputs = {}
 
     counter = CollectionCounter()
     counts = counter.counts
@@ -245,6 +244,10 @@ def main(argv=None) -> int:
     total_frames = len(corpus)
     run = pipeline.run
     impl = args.impl
+    # Sized from the config and the chain, and filled inside the loop with
+    # nothing but copies: the text of these records is built after the run.
+    outputs = OutputStore(total_frames, config['trajectory']['waypoints'],
+                          pipeline.chain.dof)
 
     for index in range(args.warmup):
         depth, colour = corpus[index % total_frames]
@@ -283,12 +286,12 @@ def main(argv=None) -> int:
         row[1] = counts[1]
         row[2] = counts[2]
 
-        if frame not in outputs:
+        if not outputs.seen[frame]:
             # The pipeline is deterministic, so a frame seen twice produces the
             # same answer. One line per frame of the store, in frame order, is
             # what cpp/bench/bench_pipeline.cpp writes and what
             # harness/compare_outputs.py reads.
-            outputs[frame] = output_record(impl, frame, result)
+            outputs.record(frame, result)
     elapsed = time.time() - started
     counter.detach()
 
@@ -301,8 +304,9 @@ def main(argv=None) -> int:
 
     args.out_output.parent.mkdir(parents=True, exist_ok=True)
     with args.out_output.open('w', encoding='utf-8') as handle:
-        for frame in sorted(outputs):
-            handle.write(outputs[frame] + '\n')
+        for frame in range(total_frames):
+            if outputs.seen[frame]:
+                handle.write(output_record(impl, frame, outputs) + '\n')
 
     totals = scalars[:, 2]
     summary = {
