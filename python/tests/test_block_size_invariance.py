@@ -73,3 +73,28 @@ def test_block_size_does_not_change_the_answer(manifest, tmp_path):
             assert np.array_equal(want[2], have[2]), (
                 f"block {block}, frame {frame}: joint solution differs by "
                 f"{np.abs(want[2] - have[2]).max():.3e} rad")
+
+
+def test_block_larger_than_the_accumulator_is_rejected():
+    """Widening alone would move the trap, not remove it.
+
+    int32 counts to 2147483647. A block above that would wrap exactly as int16
+    did, so the constructor refuses it and names the bound instead of computing
+    a wrong answer quietly.
+    """
+    from grasp_core.plane import _accumulator_dtype
+
+    assert np.dtype(_accumulator_dtype(32767)).name == "int16"
+    assert np.dtype(_accumulator_dtype(32768)).name == "int32"
+    assert np.dtype(_accumulator_dtype(2147483647)).name == "int32"
+
+    with pytest.raises(ValueError, match="ransac_block_points"):
+        _accumulator_dtype(2147483648)
+
+
+def test_the_config_note_states_the_bound():
+    """The config makes a claim about itself; the claim has to be true."""
+    note = json.loads(CONFIG.read_text())["implementation"]["_comment"]
+    assert "bit-identical" in note
+    # Whatever wording it uses, it must name the limit a reader would hit.
+    assert "2147483647" in note or "accumulator" in note

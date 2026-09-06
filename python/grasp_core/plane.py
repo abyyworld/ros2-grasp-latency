@@ -32,6 +32,25 @@ from .config import canonicalise_columns
 DEGENERATE_NORM = 1e-12
 
 
+# Candidate accumulator widths, narrowest first. The reduction sums at most
+# `block_points` ones, so the first type whose maximum reaches that is correct
+# and cheapest. Beyond the widest, construction fails rather than wrapping:
+# silent wrapping in a stage whose output feeds every later stage is the worst
+# available outcome, and a block of two billion points is a typo, not a config.
+_ACCUMULATOR_WIDTHS = ((np.int16, 32767), (np.int32, 2147483647))
+
+
+def _accumulator_dtype(block_points: int):
+    for dtype, limit in _ACCUMULATOR_WIDTHS:
+        if block_points <= limit:
+            return dtype
+    widest, limit = _ACCUMULATOR_WIDTHS[-1]
+    raise ValueError(
+        f"ransac_block_points={block_points} exceeds {limit}, the largest block "
+        f"the inlier accumulator ({np.dtype(widest).name}) can count without "
+        f"wrapping. Lower implementation.ransac_block_points in the config.")
+
+
 class PlaneRemover:
     __slots__ = ('_deviates', '_iterations', '_threshold', '_min_cos',
                  '_min_inliers', '_removal_offset', '_block', '_points',
@@ -54,12 +73,20 @@ class PlaneRemover:
         self._plane_flat = np.empty(4 * k, dtype=np.float64)
         self._counts = np.empty(k, dtype=np.int64)
         # Narrow accumulator, sized to what a block can actually reach. The
-        # reduction below sums at most `block_points` ones per candidate, so
-        # int16 is safe up to 32767 and is measurably cheaper than int32:
-        # forcing int32 unconditionally cost 14.7 ms on the plane stage at
-        # 640x480. int16 was originally used unconditionally, which wrapped
-        # silently above 32767 and made RANSAC choose a different candidate.
-        self._partial = np.empty(k, dtype=np.int16 if block_points <= 32767 else np.int32)
+        # reduction below sums at most one per row of the block per candidate,
+        # so the width has to hold `block_points`. int16 is measurably cheaper
+        # and suffices for every configuration anyone would ship: forcing int32
+        # unconditionally cost 14.7 ms on the plane stage at 640x480, a quarter
+        # of the stage that dominates the frame.
+        #
+        # This started as an unconditional int16 under a comment asserting a
+        # block could not overflow it. It could, above 32767, and it did: the
+        # per-block counts wrapped negative, RANSAC scored candidates wrongly
+        # and chose a different plane from the C++ implementation, which the
+        # equivalence gate caught at a 131072-point block with plane normals
+        # 0.139 apart. Widening alone would leave the same trap one power of
+        # two further out, so the bound is also checked rather than trusted.
+        self._partial = np.empty(k, dtype=_accumulator_dtype(block_points))
         self._normals = np.empty((k, 3), dtype=np.float64)
         self._offsets = np.empty(k, dtype=np.float64)
         self._valid = np.empty(k, dtype=np.bool_)

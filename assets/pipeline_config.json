@@ -1,6 +1,5 @@
 {
   "_comment": "Single source of truth for both implementations. Neither the C++ nor the Python pipeline may hard-code any value that appears here; tests/test_config_is_sole_source.py enforces it.",
-
   "camera": {
     "_comment": "Fixed eye-to-hand RGB-D camera above the table, looking down. The four intrinsics below describe the reference 640x480 stream; docs/ALGORITHM.md S1 gives the rule that carries them to another sensor mode.",
     "reference_width": 640,
@@ -12,27 +11,39 @@
     "intrinsics_note": "Square pixels, so fx == fy, and the principal point is the image centre: (640-1)/2 = 319.5, (480-1)/2 = 239.5. A different sensor mode is the same optics reading a different window of the same array, so the focal length in pixels tracks the vertical resolution only (fx = fy = fy_ref * H / reference_height) and the principal point is recentred on the new image. Scaling all four by W / reference_width instead would claim a wider mode stretches the image, and would put cy at 317.34 on the 480-row 848x480 stream, which no sensor reports. The rule is the identity at the reference resolution, which is why these four values are what they are.",
     "depth_scale_m": 0.001,
     "T_base_cam": [
-      0.0, -1.0,  0.0,   0.30,
-     -1.0,  0.0,  0.0,   0.00,
-      0.0,  0.0, -1.0,   0.85,
-      0.0,  0.0,  0.0,   1.00
+      0.0,
+      -1.0,
+      0.0,
+      0.3,
+      -1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      -1.0,
+      0.85,
+      0.0,
+      0.0,
+      0.0,
+      1.0
     ],
     "T_base_cam_note": "Camera optical frame (x right, y down, z forward) looking straight down from 0.85 m, 0.30 m in front of the robot base: cam +z maps to base -z, cam +x to base -y, cam +y to base -x. det(R) = +1."
   },
-
   "deproject": {
     "stride": 1,
-    "z_min_m": 0.20,
-    "z_max_m": 1.20
+    "z_min_m": 0.2,
+    "z_max_m": 1.2
   },
-
   "workspace": {
     "_comment": "Axis-aligned crop in the panda_link0 frame. Anything outside is not reachable and not worth clustering.",
-    "x_min": 0.05, "x_max": 0.75,
-    "y_min": -0.35, "y_max": 0.35,
-    "z_min": -0.05, "z_max": 0.45
+    "x_min": 0.05,
+    "x_max": 0.75,
+    "y_min": -0.35,
+    "y_max": 0.35,
+    "z_min": -0.05,
+    "z_max": 0.45
   },
-
   "plane": {
     "_comment": "RANSAC table removal. Sample indices come from a precomputed uniform table (see ransac_table) so the two implementations cannot diverge through their PRNGs.",
     "iterations": 128,
@@ -43,22 +54,23 @@
     "clearance_m": 0.004,
     "clearance_note": "Points within inlier_threshold + clearance of the refit plane, and everything below it, are removed."
   },
-
   "cluster": {
     "voxel_size_m": 0.01,
     "connectivity": 6,
     "min_points": 40
   },
-
   "grasp": {
-    "approach_axis_base": [0.0, 0.0, -1.0],
+    "approach_axis_base": [
+      0.0,
+      0.0,
+      -1.0
+    ],
     "grasp_depth_m": 0.02,
     "grasp_depth_note": "How far below the cluster's highest point the TCP is placed.",
     "min_height_above_plane_m": 0.005,
     "finger_clearance_m": 0.01,
     "max_width_m": 0.08
   },
-
   "ik": {
     "_comment": "Damped least squares with a null-space pull toward q_neutral. Seeded from q_neutral every frame, not from the previous solution, so per-frame cost does not depend on tracking history.",
     "max_iterations": 100,
@@ -69,16 +81,21 @@
     "nullspace_note": "Measured, not guessed. At this damping, with the gain at 0.1, the solver converged on 0 of 100 real grasp targets: I - J^T (J J^T + lambda^2 I)^-1 J differs from a true null-space projector by O(lambda^2) while lambda > 0, so the bias leaks into task space and the solve stalls at a fixed point 2.87 mm from the target against a 0.5 mm tolerance. The failure is in position, not orientation; the orientation error stays inside 1.45 mrad of a 5 mrad tolerance. An earlier version of this note put it at 198 mrad, from a sweep taken before the S5 wrist fold existed, and that figure does not reproduce. With a genuine pseudo-inverse projector it converges but costs an SVD per iteration. Seeded from q_neutral every frame the solution already sits near the neutral posture, so the bias buys nothing here and the term is off. docs/METHOD.md section 11 has the damping against gain grid.",
     "max_step_rad": 0.2
   },
-
   "trajectory": {
     "waypoints": 20,
     "velocity_fraction": 0.5,
     "min_duration_s": 0.5,
     "max_duration_s": 5.0,
-    "joint_names": ["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4",
-                    "panda_joint5", "panda_joint6", "panda_joint7"]
+    "joint_names": [
+      "panda_joint1",
+      "panda_joint2",
+      "panda_joint3",
+      "panda_joint4",
+      "panda_joint5",
+      "panda_joint6",
+      "panda_joint7"
+    ]
   },
-
   "sensor": {
     "_comment": "Depth-sensor error model. Read by harness/make_dataset.py only -- neither pipeline sees it -- but it lives here so a corpus is reproducible from one file, and because RANSAC's difficulty is set by these numbers.",
     "axial_noise_sigma_coeff": 0.0015,
@@ -88,12 +105,14 @@
     "baseline_dropout_prob": 0.002,
     "dropout_note": "Dropout probability ramps linearly from baseline_dropout_prob to grazing_dropout_prob as |cos(incidence)| falls from grazing_cos_threshold to 0. Steeply viewed surfaces -- object side walls -- mostly return nothing, as on a real sensor."
   },
-
   "scene": {
     "_comment": "Synthetic table scene sampled by harness/make_dataset.py. Not read by either pipeline.",
     "table": {
-      "pivot_xy": [0.40, 0.0],
-      "half_x": 0.40,
+      "pivot_xy": [
+        0.4,
+        0.0
+      ],
+      "half_x": 0.4,
       "half_y": 0.38,
       "height_m": 0.0,
       "height_jitter_m": 0.008,
@@ -103,12 +122,30 @@
     "objects": {
       "count_max": 3,
       "box_probability": 0.6,
-      "narrow_half_m": [0.014, 0.030],
-      "long_ratio": [1.0, 2.0],
-      "cylinder_radius_m": [0.016, 0.030],
-      "height_m": [0.030, 0.075],
-      "place_x_m": [0.30, 0.52],
-      "place_y_m": [-0.22, 0.22],
+      "narrow_half_m": [
+        0.014,
+        0.03
+      ],
+      "long_ratio": [
+        1.0,
+        2.0
+      ],
+      "cylinder_radius_m": [
+        0.016,
+        0.03
+      ],
+      "height_m": [
+        0.03,
+        0.075
+      ],
+      "place_x_m": [
+        0.3,
+        0.52
+      ],
+      "place_y_m": [
+        -0.22,
+        0.22
+      ],
       "min_gap_m": 0.05,
       "min_gap_note": "Clear separation between footprints, so 6-connected 1 cm voxels never merge two objects into one cluster.",
       "primary_area_ratio": 1.5,
@@ -117,12 +154,36 @@
     },
     "shading": {
       "_comment": "RGB is rendered only because a real node has to decode it; the pipeline never reads colour.",
-      "light_dir_base": [0.35, 0.25, 1.0],
+      "light_dir_base": [
+        0.35,
+        0.25,
+        1.0
+      ],
       "ambient": 0.25,
-      "albedo": [[0.55, 0.53, 0.50], [0.85, 0.30, 0.25], [0.25, 0.60, 0.85], [0.90, 0.75, 0.25]]
+      "albedo": [
+        [
+          0.55,
+          0.53,
+          0.5
+        ],
+        [
+          0.85,
+          0.3,
+          0.25
+        ],
+        [
+          0.25,
+          0.6,
+          0.85
+        ],
+        [
+          0.9,
+          0.75,
+          0.25
+        ]
+      ]
     }
   },
-
   "ros": {
     "_comment": "Topic and frame names shared by the bag writer and the ROS 2 nodes.",
     "depth_topic": "/camera/depth/image_raw",
@@ -132,47 +193,56 @@
     "color_frame_id": "camera_color_optical_frame",
     "bag_start_ns": 1000000000
   },
-
   "ransac_table": {
     "path": "assets/ransac_uniform.bin",
     "count": 384,
     "count_note": "iterations * 3 float64 values in [0,1), little-endian. Generated by tools/make_ransac_table.py.",
     "seed": 20240906
   },
-
   "implementation": {
-    "_comment": "Blocking parameters. These change how the work is issued, never what it computes: any value gives bit-identical output, only the memory traffic differs. Chosen by measurement on the machine in docs/TOOLCHAIN.md. This held only after the int16 inlier accumulator in the Python plane stage was widened to int32; before that, a block above 32767 points wrapped and changed which plane RANSAC chose.",
+    "_comment": "Blocking parameters. These change how the work is issued, never what it computes: any accepted value gives bit-identical output, only the memory traffic differs. Chosen by measurement on the machine in docs/TOOLCHAIN.md. The bound is real and enforced: the Python plane stage counts a block's inliers in the narrowest integer that can hold ransac_block_points, and refuses a block above 2147483647 rather than wrapping. An earlier unconditional int16 wrapped silently above 32767 and made RANSAC choose a different plane, which the equivalence gate caught at 131072.",
     "ransac_block_points": 512,
     "ransac_block_note": "Points scored against all candidate planes at a time. 512 x 128 float64 is 512 KiB, which keeps the distance block inside L2."
   },
-
   "benchmark": {
     "warmup_frames": 100,
     "measured_frames": 2000,
     "deadline_hz": 30.0
   },
-
   "analysis": {
     "_comment": "Read by harness/analyze.py and harness/compare_outputs.py only. Here rather than in the harness so a published percentile can be traced to the definition that produced it.",
-    "percentiles": [50.0, 90.0, 95.0, 99.0, 99.9],
+    "percentiles": [
+      50.0,
+      90.0,
+      95.0,
+      99.0,
+      99.9
+    ],
     "percentile_method": "nearest",
     "percentile_method_note": "Nearest observed sample, never interpolated between two. A latency that was never measured is not a latency, and at n = 2000 the p99.9 sits between the second and third slowest samples where interpolation would invent a value.",
     "bootstrap_resamples": 2000,
     "bootstrap_confidence": 0.95,
     "bootstrap_seed": 20240906,
-    "equivalence_tolerance": 1e-6,
+    "equivalence_tolerance": 1e-06,
     "equivalence_tolerance_note": "Absolute, in metres, radians or dimensionless matrix entries, matching docs/ALGORITHM.md. Far tighter than any physical effect and far looser than the 1e-15 noise from differing summation orders.",
     "reference_dataset": "table_640x480",
     "tail_percentile": 99.0,
     "tail_percentile_note": "The percentile the garbage-collection attribution is run against: frames at or above it are the tail whose cause is in question."
   },
-
   "rate_sweep": {
     "_comment": "harness/rate_sweep.py drives each implementation at these fixed control rates over the frame store, with absolute deadlines taken from a monotonic start.",
-    "rates_hz": [10.0, 30.0, 100.0, 250.0],
+    "rates_hz": [
+      10.0,
+      30.0,
+      100.0,
+      250.0
+    ],
     "jobs_per_rate": 200,
     "warmup_jobs": 20,
-    "datasets": ["table_320x240", "table_640x480"],
+    "datasets": [
+      "table_320x240",
+      "table_640x480"
+    ],
     "datasets_note": "Two resolutions, because the rate at which an implementation starts missing deadlines is a property of the pair and not of the language."
   }
 }
