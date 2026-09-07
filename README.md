@@ -10,122 +10,85 @@ gate that has to pass before any latency number is quoted.
 
 ## The answer
 
-**Nothing, on this pipeline. And that is the interesting part.**
+**It depends almost entirely on whether NumPy reaches a tuned BLAS, and in a
+stock ROS 2 container it does not.**
 
-`table_640x480`, 2000 measured frames per implementation, all runs back to back
-in one window, gate green, milliseconds:
+Everything below came off one machine, an Apple M-series host, so the numbers
+are comparable to each other. `table_640x480`, 2000 measured frames.
 
-| implementation | p50 | p95 | p99 |
-| :--- | ---: | ---: | ---: |
-| C++, Eigen 3.4, `-O2 -DNDEBUG` | 47.7 | 60.2 | 62.9 |
-| Python, NumPy 2.4 and SciPy 1.17 | 47.2 | 56.3 | 60.3 |
-| Python, `OPENBLAS_NUM_THREADS=1` | 49.1 | 54.0 | 56.3 |
+**Called directly, in one process:**
 
-Python costs **0.99x at p50 and 0.96x at p99**, which is to say it costs
-nothing measurable. Rewriting this node in C++ would not have bought a
-millisecond.
+| implementation | p50 | p99 |
+| :--- | ---: | ---: |
+| C++, Eigen, `-O2` | 35.6 ms | 58.6 ms |
+| Python, NumPy | 201.8 ms | 276.8 ms |
 
-That is not because Python is fast. Per stage:
+Python costs **5.67x at p50**. The equivalence gate passes on this run at
+2.3e-14 with zero mismatches, so the two are computing the same answer.
+
+**Behind a real ROS 2 node at 30 Hz over Fast DDS**, three repeats each,
+2100 frames published per arm:
+
+| node | frames dropped (3 runs) | end to end p50 |
+| :--- | ---: | ---: |
+| rclcpp, composed | **0.0%, 0.0%, 0.0%** | 26 ms |
+| rclcpp, composed, intra-process | **0.0%, 0.0%, 0.0%** | 26 ms |
+| rclcpp, own process | 6.3%, 15.9%, 33.1% | 26 ms |
+| **rclpy, own process** | **77.8%, 78.2%, 85.8%** | **334 ms** |
+
+**The Python node drops four frames in five, reproducibly.** A 30 Hz loop
+written that way runs at about 6 Hz and discards the rest. The composed C++
+node drops nothing, in every run.
+
+### The BLAS is the whole story, and it was measured
+
+An earlier revision of this README reported the two implementations at parity
+in process. That was measured on an x86 host and it does not generalise, which
+`tools/blas_probe.py` establishes directly rather than by argument. On the
+product the plane stage actually issues:
+
+| host | NumPy | BLAS | GFLOP/s |
+| :--- | :--- | :--- | ---: |
+| x86, where parity was measured | 2.4.6 | `scipy-openblas` | **23.50** |
+| arm64 ROS 2 container | 1.26.4 | reference `blas` | **2.17** |
+
+**10.8x.** The RANSAC plane stage is 93 percent of the C++ frame and is one
+large matrix product, so Python's standing on this pipeline is decided by that
+one number. With OpenBLAS, Python wins the stage outright and the whole
+pipeline lands near parity. With the reference BLAS that ships in a standard
+ROS 2 container, it loses the stage 5.2x and the pipeline with it.
+
+Every stage that is *not* a large matrix product is 10x to 237x slower in
+Python, consistently, on both hosts:
 
 | stage | cpp p50 | py p50 | ratio |
 | :--- | ---: | ---: | ---: |
-| deproject | 483 us | 5736 us | 11.9x |
-| transform and crop | 785 us | 6100 us | 7.8x |
-| **plane, RANSAC** | **46426 us** | **34155 us** | **0.7x** |
-| cluster | 41 us | 333 us | 8.1x |
-| grasp synthesis | 8 us | 226 us | 27.9x |
-| inverse kinematics | 12 us | 537 us | 43.4x |
-| trajectory | 1.5 us | 24 us | 16.2x |
+| decode | 0.0 us | 10.2 us | 237x |
+| deproject | 981 us | 12074 us | 12.3x |
+| transform and crop | 1216 us | 13254 us | 10.9x |
+| **plane, RANSAC** | **33155 us** | **173913 us** | **5.2x** |
+| cluster | 68 us | 705 us | 10.3x |
+| grasp synthesis | 16 us | 458 us | 28.7x |
+| inverse kinematics | 25 us | 964 us | 38.0x |
+| trajectory | 4 us | 58 us | 14.9x |
 
-Python is 8x to 43x slower on every stage that iterates, and it loses by 186x
-on message decode. It is **30 percent faster** on the one stage that is a
-single large matrix product, because NumPy issues 128 RANSAC candidates against
-212,574 points as blocked BLAS `dgemm` while the C++ walks a scalar loop over
-the same arithmetic. That stage is 97 percent of the C++ frame, so it decides
-the total and everything else is rounding.
+**So the transferable claim is not a ratio.** It is that a NumPy pipeline's
+competitiveness rests on a dependency most people never check, and that
+dependency is absent from the container this project's own ROS 2 nodes run in.
+If you are about to argue that Python is fast enough because your profile is
+dominated by array work, measure the BLAS you will actually deploy against.
 
-## In a real ROS 2 node, the answer reverses
+**Intra-process comms bought nothing.** Zero copy removes a 614 kB
+serialisation per frame; the composed node measured the same with it as
+without, inside the run-to-run spread. The frame was never transport bound.
+That is a negative result for the first optimisation most people reach for.
 
-Everything above measures the pipeline called directly, in one process. That is
-the honest way to isolate the language, and it is not how anybody ships a grasp
-node. Put the same two cores behind rclcpp and rclpy, drive them from a live
-publisher at 30 Hz over Fast DDS, and the conclusion inverts.
+**Caveats worth stating.** The standalone rclcpp drop rate is noisy across
+repeats (6.3 to 33.1 percent) and falls monotonically run to run, which looks
+like container warm-up rather than a property of the node. The composed arms,
+which drop nothing in every run, are the trustworthy C++ figure.
 
-Measured in the Docker image on an Apple M-series host, 2100 frames published
-per arm at 640x480:
-
-| node | frames processed | dropped | compute p50 | end to end p50 | end to end p99 |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| rclcpp, own process | 1869 / 2100 | 11% | 25.6 ms | 26.0 ms | 29.5 ms |
-| rclcpp, composed | 2100 / 2100 | **0%** | 25.4 ms | 25.5 ms | 33.5 ms |
-| rclcpp, composed, intra-process | 2100 / 2100 | **0%** | 26.3 ms | 26.3 ms | 35.1 ms |
-| **rclpy, own process** | **405 / 2100** | **81%** | **163.3 ms** | **314.6 ms** | **1002 ms** |
-
-**The Python node drops four frames in five and its p99 end-to-end latency is a
-full second.** Not because the algorithm changed: it is the same `grasp_core`
-the in-process benchmark ran, computing the same answer. The per-stage ratios
-move from parity to 6.1x on the plane stage and 84x on IK, and the node falls
-far enough behind that the QoS queue discards most of the stream. A 30 Hz
-control loop written this way does not run at 30 Hz. It runs at about 6 Hz and
-loses the rest.
-
-**Intra-process comms did not help.** Zero copy removes the serialisation of a
-614 kB depth image per frame, and the composed node still measured 26.3 ms
-against 25.4 ms without it: slightly worse, and inside the noise. The frame was
-never transport bound, so removing the copy bought nothing. That is a negative
-result for the optimisation most often reached for first.
-
-**These absolutes are not comparable with the in-process table above.** They
-are different machines: the in-process runs are on a shared x86 vCPU, these are
-in a container on Apple Silicon. Within each table both implementations share
-one machine, so each ratio is sound, but the two tables are not comparable to
-each other.
-
-One thing that difference exposes is worth more than either table. Python's
-plane stage is 34 ms in the x86 run and 144 ms here, while the C++ one got
-*faster*, 46 ms to 24 ms. The in-process parity depended on NumPy reaching a
-well-tuned BLAS, and the container's stock arm64 NumPy evidently does not
-reach one. **Python's advantage on that stage is a property of the BLAS it
-happens to link, not of the language, and it does not travel.**
-
-The transferable claim is therefore not a ratio. It is this: **the language
-gap is a property of how much of your frame is one large array operation.** The
-workload sweep below measures that directly, and the ratio moves from 0.7x to
-7.89x as the vectorised stage stops dominating.
-
-**Do not read the absolutes to three significant figures.** The same binary on
-the same corpus measured p50 between 47.7 and 58.1 ms across runs in one
-session, about 20 percent, with no matching signal in the load average. Four
-candidates were tested rather than argued about:
-
-| candidate | test | result |
-| :--- | :--- | :--- |
-| hypervisor steal | steal ticks in `/proc/stat` | 0.00 percent, not this |
-| run length | 250, 500, 2000 frames, twice each | all one band, not this |
-| memory-bandwidth contention | three-core stressor | both move 1.04x, ratio unchanged, not this |
-| scheduler migration | `taskset -c 2` against unpinned | spread 14.9 to 8.9 percent, **partly this** |
-
-Pinning removes about a third of it and roughly 9 percent remains unexplained;
-the CPU governor is not exposed in this container so frequency scaling could
-not be tested. `GRASP_PIN=2 harness/run_all.sh` pins if you want the tighter
-number. The honest reading is that this machine supports two significant
-figures on an absolute, and a ratio taken inside one window is worth more than
-either number in it.
-
-**The C++ number is also a flag choice.** The table uses the pinned
-`-O2 -DNDEBUG`. Rebuilt with `-O3 -march=native` the same C++ runs its plane
-stage in 31.0 ms rather than 50.6 ms in the same window, 1.59x faster, which
-would put C++ ahead. `-O3` alone is *slower* than `-O2` here, at 0.94x.
-`-march=native` enables FMA contraction so it changes the arithmetic and the
-binary; it changes the answers by 1e-14, checked through the same equivalence
-gate. See [results/compiler_flags.json](results/compiler_flags.json).
-
-**Neither implementation holds a 33.3 ms budget at 640x480.** At 320x240 both
-do. Driven by a scheduler with absolute deadlines, at 640x480 both miss every
-deadline at 30 Hz. **At this resolution the pipeline is the problem and the
-language is not**, and porting it to C++ does not fix it.
-
-### Why the whole pipeline is at parity when single stages are 43x
+### Why one stage decides the whole pipeline
 
 Per stage at 640x480, p50, in microseconds, ordered by what the stage costs
 C++:
@@ -359,6 +322,22 @@ absolute latency from this machine is worth about two significant figures, and
 a ratio measured inside one window is worth more than either number in it.
 Quoting a p50 to three decimals, as an earlier revision of this README did,
 implied a precision the hardware cannot deliver.
+
+**The headline reversed twice, and the second reversal was the real finding.**
+The first in-process measurements said Python cost 1.5x. A cleaner run on an
+idle machine said it cost nothing, 0.99x, and that was published. Running the
+same benchmark inside the ROS 2 container said 5.67x. All three were correct
+measurements of different machines, and none of them was the answer.
+
+The answer only appeared when the BLAS was measured directly: 23.50 GFLOP/s on
+the host where parity was found against 2.17 in the container, a 10.8x gap on
+the one stage that is 93 percent of the frame. The ratio was never a property
+of the language. It was a property of a library dependency nobody had looked
+at, and it took being wrong twice to go and look.
+
+The lesson generalises past this repository: a benchmark that reports a ratio
+without reporting what its numerical libraries linked against is reporting the
+libraries, not the languages.
 
 ## How to reproduce
 
