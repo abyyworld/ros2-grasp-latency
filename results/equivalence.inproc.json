@@ -1,0 +1,109 @@
+{
+  "left": {
+    "impl": "cpp",
+    "path": "/workspace/results/inproc_cpp.output.jsonl"
+  },
+  "right": {
+    "impl": "py",
+    "path": "/workspace/results/inproc_py.output.jsonl"
+  },
+  "frames_compared": 100,
+  "tolerance": 1e-06,
+  "agree": true,
+  "bail_points": {
+    "none": 100
+  },
+  "waypoint_amplification": 23.094006534665823,
+  "trajectory_block_length": 440,
+  "fields": {
+    "plane_found": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "worst_index": -1,
+      "mismatches": []
+    },
+    "plane": {
+      "compared": 400,
+      "skipped": 0,
+      "worst_abs_deviation": 7.771561172376096e-16,
+      "worst_frame": 53,
+      "worst_index": 2,
+      "mismatches": []
+    },
+    "cluster_points": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "worst_index": -1,
+      "mismatches": []
+    },
+    "graspable": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "worst_index": -1,
+      "mismatches": []
+    },
+    "width": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 1.6653345369377348e-16,
+      "worst_frame": 12,
+      "worst_index": -1,
+      "mismatches": []
+    },
+    "tcp": {
+      "compared": 1600,
+      "skipped": 0,
+      "worst_abs_deviation": 2.270406085358445e-14,
+      "worst_frame": 18,
+      "worst_index": 1,
+      "mismatches": []
+    },
+    "converged": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "worst_index": -1,
+      "mismatches": []
+    },
+    "iterations": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": null,
+      "worst_frame": -1,
+      "worst_index": -1,
+      "mismatches": []
+    },
+    "q": {
+      "compared": 700,
+      "skipped": 0,
+      "worst_abs_deviation": 3.985700658404312e-14,
+      "worst_frame": 18,
+      "worst_index": 6,
+      "mismatches": []
+    },
+    "duration_s": {
+      "compared": 100,
+      "skipped": 0,
+      "worst_abs_deviation": 2.4868995751603507e-14,
+      "worst_frame": 31,
+      "worst_index": -1,
+      "mismatches": []
+    },
+    "trajectory": {
+      "compared": 44000,
+      "skipped": 0,
+      "worst_abs_deviation": 2.453592884421596e-13,
+      "worst_frame": 18,
+      "worst_index": 108,
+      "mismatches": []
+    }
+  },
+  "problems": []
+}

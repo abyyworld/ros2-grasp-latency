@@ -1,0 +1,22 @@
+{
+  "machine": {
+    "platform": "Linux-6.8.0-117-generic-aarch64-with-glibc2.39",
+    "machine": "aarch64",
+    "processor": "aarch64",
+    "python": "3.12.3"
+  },
+  "blas": {
+    "name": "blas",
+    "version": "unknown",
+    "detection_method": "system",
+    "openblas_config": "unknown",
+    "numpy_version": "1.26.4"
+  },
+  "shape": {
+    "block_points": 512,
+    "candidates": 128,
+    "k": 4
+  },
+  "gflops_plane_shape": 2.1722610539978953,
+  "gflops_1024_square": 2.263879412024826
+}
