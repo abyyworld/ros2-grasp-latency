@@ -18,10 +18,13 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO}"
 
+# Six repeats per policy, not three. With three, the median of the p99s moved
+# between 0.96x and 2.52x across two matrices on the same machine, which is a
+# statement about the sample size rather than about the policies.
 DATASET=table_320x240
 RATE=30
 FRAMES=2000
-REPEATS=3
+REPEATS=6
 CPU=2
 OUT="${REPO}/results/jitter"
 

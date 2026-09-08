@@ -395,6 +395,18 @@ python3 tools/fill_method_placeholders.py --measure-nullspace
 python3 tools/check_style.py            # no em dashes, no quality adjectives
 ```
 
+The real-time matrix is its own script, because it wants a quiet machine and a
+pinned CPU more than anything else here does:
+
+```bash
+harness/run_realtime_sweep.sh           # about 20 minutes, writes results/jitter/
+```
+
+It runs six alternating repeats of `SCHED_OTHER` and `SCHED_FIFO`, the
+`mlockall` arm, the no-pretouch control, and the PREEMPT_RT arm when the kernel
+has it. `SCHED_FIFO` needs `CAP_SYS_NICE`; without it the run still completes
+and records `fifo-denied` in its header rather than reporting a null result.
+
 ### With Docker: the ROS 2 layer, which has produced no number yet
 
 ROS 2 cannot be installed in the container this repository was written in, so
@@ -461,6 +473,11 @@ Not measured, each one written up at length in
 * **T10**, the gate bounds agreement, not correctness. Two implementations of a
   wrong spec would pass it together. Correctness against the spec is the unit
   tests and a forward-kinematics cross-check against MuJoCo.
+* **T11**, PREEMPT_RT was not run. The kernel here is stock, so the scheduling
+  comparison in [docs/REALTIME.md](docs/REALTIME.md) is `SCHED_FIFO` against
+  `SCHED_OTHER` on a normal kernel and nothing in this repository describes a
+  preemptible one. `harness/run_realtime_sweep.sh` runs that arm and says
+  plainly when it was skipped.
 
 ## Repository layout
 
@@ -469,6 +486,7 @@ docs/ALGORITHM.md     the frozen 8-stage spec: S0 decode to S7 trajectory
 docs/METHOD.md        how the measurement is made, and threats T1 to T10
 docs/FORMATS.md       the timing, output and manifest wire formats
 docs/ROS2.md          the node design, the QoS decisions, what is unverified
+docs/REALTIME.md      jitter, allocation, page faults, worst-case attribution
 docs/TOOLCHAIN.md     the machine every number came from
 
 assets/               pipeline_config.json, the Panda chain, the RANSAC
@@ -481,6 +499,7 @@ tools/                style checker, chain extractor, doc placeholder filler
 ros2_ws/              rclcpp and rclpy node packages, built only in Docker
 docker/               the ROS 2 image and the node benchmark script
 results/              RESULTS.md, the aggregates as JSON and CSV, the plots
+results/jitter/       per-cycle release jitter, slack and allocation counts
 ```
 
 `data/` and the per-frame timing JSONL are regenerated rather than committed.
