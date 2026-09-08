@@ -184,6 +184,60 @@ behind, which is what a downstream controller waits for.
 The ratio against the plane stage's share of the C++ frame, and what each
 frame is made of on both sides.
 
+## Holding a period, which is a different question from holding a median
+
+A servo does not consume a median. It has a period and a deadline, and what it
+needs to know is whether the answer lands on the same phase every cycle, what
+the worst cycle does, and whether the hot path can be trusted not to allocate
+or fault. `cpp/bench/bench_jitter.cpp` releases work on absolute deadlines and
+records all three per cycle. Full method and the caveats in
+[docs/REALTIME.md](docs/REALTIME.md); the per-cycle records are committed in
+`results/jitter/`.
+
+2000 cycles at 30 Hz on `table_320x240`, pinned to one CPU, six alternating
+repeats per policy, medians across repeats:
+
+| release jitter | `SCHED_OTHER` | `SCHED_FIFO` | improvement |
+| :--- | ---: | ---: | ---: |
+| p50 | 152.0 us | 97.2 us | **1.56x** |
+| p99 | 502.0 us | 229.0 us | **2.19x** |
+| max | 15.8 ms | 20.8 ms | **none** |
+
+**Real-time priority buys the median and the ninety-ninth percentile and does
+nothing for the maximum.** Every `SCHED_FIFO` run beats every `SCHED_OTHER` run
+at p50, with no overlap between the ranges. The worst period is 2.4 to 42.1 ms
+against a 33.3 ms budget under both policies, so the loop occasionally wakes
+one to two whole periods late. Nothing a guest scheduler does can prevent that,
+because what is being preempted is the virtual machine and not the process
+inside it.
+
+The three per-cycle findings underneath that:
+
+* **The hot path allocates nothing.** 28000 measured cycles across fourteen
+  runs, zero allocations, with a positive control that must trip the counter:
+  taking `Pipeline::run`'s result by value instead of by reference allocates
+  once per frame, so the `const &` in that signature is worth exactly one heap
+  allocation per frame.
+* **It faults nothing either, and the first measurement of that was wrong.**
+  The run reported 19 minor faults per 2000 cycles, and they were the
+  recorder's: `bench_jitter` wrote its own per-cycle log into a buffer it had
+  reserved and never touched, so those pages faulted inside the measured window
+  where a reader would charge them to the pipeline. Fault count tracks buffer
+  size exactly, 19 at 2000 cycles and 109 at 8000, which is one per 4 KB page
+  of records. Pre-touched it is 0 and 0, and `--no-pretouch` keeps the failing
+  case runnable rather than describing it.
+* **The worst cycle is not the algorithm.** Grouping cycles by which stored
+  frame they processed, frame content accounts for a band of 1.37 to 1.76 ms.
+  The worst cycle in each run sits 5.38 to 17.21 ms above its own frame's
+  median, and every one of the ten slowest cycles in every run allocated zero
+  times. Most of the worst-case excess is the machine, which is the argument
+  for isolation and a preemptible kernel, stated as a measurement.
+
+The honest limit on all of this: the kernel here is stock, so PREEMPT_RT is
+absent (threat T11), and at 9.9 ms of compute against a 33.3 ms period this
+loop has three times the budget it needs, so the CPU is mostly idle between
+cycles. A loop running near its deadline would look different.
+
 ## What was surprising or did not work
 
 **The IK converged on 0 of 100 targets, and the cause was in the spec.** The

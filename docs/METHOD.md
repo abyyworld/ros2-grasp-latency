@@ -687,10 +687,11 @@ the arm was skipped rather than quietly omitting it.
 
 The host is also the wrong shape for absolute jitter figures: four shared
 vCPUs, no isolation, no exposed governor, and the run-to-run spread of T2. The
-maxima bear that out directly. Worst-case release jitter of 17 to 67 ms against
-a 33.3 ms period means the loop occasionally wakes an entire period or two
-late, which is the whole virtual machine being preempted and not something a
-guest scheduling policy can address.
+maxima bear that out directly. Worst-case release jitter of 2.4 to 42.1 ms
+against a 33.3 ms period, under both scheduling policies, means the loop
+occasionally wakes an entire period or two late, which is the whole virtual
+machine being preempted and not something a guest scheduling policy can
+address.
 
 What survives the machine is the part that is a ratio measured within one run
 on one host: the two policies back to back in an alternating order, and the

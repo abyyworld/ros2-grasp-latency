@@ -47,6 +47,7 @@
 #include <string>
 #include <vector>
 
+#include "grasp_core/config.hpp"
 #include "grasp_core/pipeline.hpp"
 
 namespace
@@ -86,9 +87,12 @@ struct Options
   std::string label;
   int priority = 80;
   int cpu = -1;
-  double rate_hz = 30.0;
-  long frames = 2000;
-  long warmup = 200;
+  double rate_hz = -1.0;
+  // Negative means "not given on the command line": the defaults come from
+  // assets/pipeline_config.json like every other constant in this repository,
+  // and tests/test_config_is_sole_source.py rejects them typed in here.
+  long frames = -1;
+  long warmup = -1;
   bool mlock = false;
   bool pretouch = true;
 };
@@ -101,7 +105,10 @@ struct Options
     "usage: %s --dataset DIR --out FILE\n"
     "       [--policy other|fifo] [--priority N] [--cpu N] [--mlock]\n"
     "       [--rate HZ] [--frames N] [--warmup N] [--label NAME]\n"
-    "       [--no-pretouch]\n",
+    "       [--no-pretouch]\n"
+    "rate, frames and warmup default to benchmark.deadline_hz,\n"
+    "benchmark.measured_frames and benchmark.warmup_frames in\n"
+    "assets/pipeline_config.json.\n",
     program);
   std::exit(2);
 }
@@ -270,6 +277,11 @@ int main(int argc, char ** argv)
     r.read(reinterpret_cast<char *>(rgbs[i].data()),
            static_cast<std::streamsize>(rgbs[i].size()));
   }
+
+  const grasp_core::Config cfg = grasp_core::Config::load("assets/pipeline_config.json");
+  if (opt.frames < 0) { opt.frames = cfg.benchmark.measured_frames; }
+  if (opt.warmup < 0) { opt.warmup = cfg.benchmark.warmup_frames; }
+  if (opt.rate_hz <= 0.0) { opt.rate_hz = cfg.benchmark.deadline_hz; }
 
   grasp_core::Pipeline pipeline(
     "assets/pipeline_config.json", "assets/franka/panda_chain.json",
