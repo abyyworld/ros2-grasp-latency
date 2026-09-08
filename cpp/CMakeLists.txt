@@ -55,6 +55,12 @@ add_executable(bench_pipeline bench/bench_pipeline.cpp)
 target_link_libraries(bench_pipeline PRIVATE grasp_core)
 target_compile_options(bench_pipeline PRIVATE -Wall -Wextra)
 
+# Jitter rather than latency: how far the loop drifts off its period and how
+# much slack is left against the deadline. See docs/REALTIME.md.
+add_executable(bench_jitter bench/bench_jitter.cpp)
+target_link_libraries(bench_jitter PRIVATE grasp_core)
+target_compile_options(bench_jitter PRIVATE -Wall -Wextra)
+
 enable_testing()
 
 set(GRASP_CORE_TESTS

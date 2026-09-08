@@ -129,5 +129,34 @@ int main()
     frames, small.width, small.height, small_state);
   CHECK(small_state == 0);
 
+  // Positive control. Everything above is a zero, and a broken counter also
+  // reports zero, so the two assertions so far are equally consistent with the
+  // pipeline being clean and with the instrument being dead. Allocate on
+  // purpose and require the counter to see it.
+  //
+  // The allocation chosen is the one the API deliberately avoids: Pipeline::run
+  // returns a const reference, and copying the Result reallocates the
+  // trajectory's storage. So this also measures the cost of the interface
+  // decision rather than inventing an unrelated new[].
+  g_allocations.store(0);
+  g_armed.store(true);
+  long observed_copies = 0;
+  for (int i = 0; i < frames; ++i) {
+    const grasp_core::Result copied = pipeline.run(
+      small.depth.data(), small.rgb.data(), small.width, small.height);
+    observed_copies += static_cast<long>(copied.trajectory.size());
+  }
+  g_armed.store(false);
+  const long copy_state = g_allocations.load();
+
+  std::fprintf(
+    stderr,
+    "positive control: %d frames taking the Result by value allocated %ld times "
+    "(%ld waypoints copied)\n",
+    frames, copy_state, observed_copies);
+  // One allocation per frame at least: the trajectory vector's buffer. If this
+  // is zero the counter is not working and the zeros above prove nothing.
+  CHECK(copy_state >= frames);
+
   return grasp_test::report("test_no_allocation");
 }
