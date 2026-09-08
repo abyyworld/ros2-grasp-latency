@@ -83,6 +83,17 @@ echo "--- mlock arm ---"
   --out "${OUT}/fifo_mlock.jsonl" --policy fifo --priority 80 --cpu "${CPU}" \
   --mlock --rate "${RATE}" --frames "${FRAMES}" --warmup 200 --label fifo_mlock
 
+# The instrument's own control. The loop writes one record per cycle, and
+# without pre-touching the record buffer those pages fault on first write,
+# inside the measured window, where a reader would charge them to the pipeline.
+# Running the same loop both ways is what turns "the hot path does not fault"
+# from an assertion into a measurement with a case that fails.
+echo "--- no-pretouch control ---"
+./cpp/build/bench_jitter --dataset "data/${DATASET}" \
+  --out "${OUT}/other_no_pretouch.jsonl" --policy other --cpu "${CPU}" \
+  --no-pretouch --rate "${RATE}" --frames "${FRAMES}" --warmup 200 \
+  --label other_no_pretouch
+
 echo
 python3 harness/analyze_jitter.py "${OUT}"/*.jsonl --out results/jitter_summary.json
 

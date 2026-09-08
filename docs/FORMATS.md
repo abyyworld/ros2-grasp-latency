@@ -62,7 +62,40 @@ Python records additionally carry `"gc":{"gen0":n,"gen1":n,"gen2":n}`,
 cumulative collection counts sampled at the end of the frame, which is what
 lets tail latency be attributed to garbage collection rather than guessed at.
 
-## 3. Pipeline outputs: `*.output.jsonl`
+## 3. Jitter records: `results/jitter/*.jsonl`
+
+Written by `cpp/bench/bench_jitter.cpp`, again only after the run. The first
+line is a run header and every line after it is one cycle.
+
+```json
+{"record":"run","impl":"cpp","label":"fifo_rep2","policy":"fifo",
+ "policy_notes":"pinned;fifo;","rate_hz":30,"frames":2000,
+ "warmup":200,"dataset":"data/table_320x240","width":320,"height":240,
+ "cpu":2,"priority":80,"pretouch":true,"allocations":0,"allocated_bytes":0,
+ "minor_faults":0,"major_faults":0,"overruns":0}
+{"impl":"cpp","label":"fifo_rep2","policy":"fifo","rate_hz":30,"seq":0,
+ "frame":0,"release_jitter_ns":84310,"compute_ns":10418622,
+ "slack_ns":22830401,"allocs":0}
+```
+
+The header carries what belongs to the window rather than to a cycle:
+
+* `policy_notes` records which of the requested privileges the kernel actually
+  granted. A denied `SCHED_FIFO` reads `fifo-denied(Operation not permitted)`,
+  so a run that silently degraded to `SCHED_OTHER` cannot be mistaken for a
+  null result.
+* `allocations`, `minor_faults` and `major_faults` are totals across the
+  measured window. `getrusage` is called outside every cycle, so the syscall
+  never lands in a region it would then be reported as part of.
+* `allocations` and `overruns` are also derivable from the cycle lines, and
+  `harness/analyze_jitter.py` refuses to summarise a file where the two
+  disagree.
+
+Per cycle, `release_jitter_ns` is `wake - release[k]` against a schedule fixed
+in advance, and `slack_ns` is `(release[k] + period) - finish`, negative on an
+overrun. `docs/REALTIME.md` says what was measured with them.
+
+## 4. Pipeline outputs: `*.output.jsonl`
 
 The equivalence check reads these. One line per **distinct** frame of the
 store, in frame order: the pipeline is deterministic, so a frame the benchmark

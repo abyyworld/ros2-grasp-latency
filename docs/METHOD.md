@@ -676,3 +676,24 @@ spec is the job of the unit tests and of the URDF-against-MJCF kinematics
 agreement test, which checks the forward kinematics against MuJoCo's
 independent implementation of the same Panda model. Two implementations of a
 wrong spec would sail through the gate together.
+
+## T11. PREEMPT_RT was not run, and this machine is a poor one for jitter
+
+The real-time measurements in docs/REALTIME.md compare `SCHED_FIFO` against
+`SCHED_OTHER` on a stock kernel. A preemptible kernel is a different thing and
+no number here describes one. `harness/run_realtime_sweep.sh` runs the full
+matrix including that arm, checks `uname` for an RT kernel, and reports that
+the arm was skipped rather than quietly omitting it.
+
+The host is also the wrong shape for absolute jitter figures: four shared
+vCPUs, no isolation, no exposed governor, and the run-to-run spread of T2. The
+maxima bear that out directly. Worst-case release jitter of 17 to 67 ms against
+a 33.3 ms period means the loop occasionally wakes an entire period or two
+late, which is the whole virtual machine being preempted and not something a
+guest scheduling policy can address.
+
+What survives the machine is the part that is a ratio measured within one run
+on one host: the two policies back to back in an alternating order, and the
+attribution of worst-case compute to frame content against environment. Both
+are reported as such. The absolute microsecond figures are not portable and are
+not offered as though they were.

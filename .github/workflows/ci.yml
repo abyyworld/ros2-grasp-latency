@@ -78,6 +78,23 @@ jobs:
       - name: Equivalence gate
         run: python3 harness/compare_outputs.py /tmp/cpp.output.jsonl /tmp/py.output.jsonl
 
+      # Short, and not a source of any published figure: this checks that the
+      # jitter harness still runs, that its run header still parses, and that
+      # the allocation counter still reads zero in the hot path. A runner is
+      # far too noisy for the timing numbers and none are read here.
+      - name: Jitter harness runs and the hot path still allocates nothing
+        run: |
+          ./cpp/build/bench_jitter --dataset data/ci_320x240 --out /tmp/jitter.jsonl \
+            --policy other --rate 50 --frames 100 --warmup 10 --label ci
+          python3 - <<'EOF'
+          import json
+          head = json.loads(open('/tmp/jitter.jsonl').readline())
+          assert head['record'] == 'run', head
+          assert head['allocations'] == 0, head
+          assert head['pretouch'] is True, head
+          EOF
+          python3 harness/analyze_jitter.py /tmp/jitter.jsonl --out /tmp/jitter_summary.json
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

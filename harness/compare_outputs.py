@@ -200,7 +200,7 @@ def load(path: Path, block_length: int) -> tuple[str, dict[int, dict]]:
             if missing:
                 raise SystemExit(
                     f'{path}:{number}: no {", ".join(missing)} in this record. '
-                    f'docs/FORMATS.md section 3 lists what a *.output.jsonl '
+                    f'docs/FORMATS.md section 4 lists what a *.output.jsonl '
                     f'line carries; regenerate the file with the current '
                     f'runner')
             if len(record['trajectory']) != block_length:

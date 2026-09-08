@@ -21,7 +21,15 @@
 //
 // Allocation and page-fault counters ride along because the same run answers
 // them: a hot path that allocates or faults cannot hold a deadline, and both
-// are claims this repository previously asserted rather than measured.
+// are claims this repository previously asserted rather than measured. They go
+// into a run header at the top of the output file rather than onto stderr,
+// because a number quoted in a document has to be readable back out of a
+// committed artifact.
+//
+// The recorder holds itself to the same rule as the code it measures. Its own
+// per-cycle log buffer is pre-touched, since pages first written inside the
+// measured window fault there and would be charged to the pipeline;
+// --no-pretouch runs the identical loop without that and is the control.
 #include <sched.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
@@ -82,6 +90,7 @@ struct Options
   long frames = 2000;
   long warmup = 200;
   bool mlock = false;
+  bool pretouch = true;
 };
 
 [[noreturn]] void usage(const char * program, const std::string & why)
@@ -91,7 +100,8 @@ struct Options
     stderr,
     "usage: %s --dataset DIR --out FILE\n"
     "       [--policy other|fifo] [--priority N] [--cpu N] [--mlock]\n"
-    "       [--rate HZ] [--frames N] [--warmup N] [--label NAME]\n",
+    "       [--rate HZ] [--frames N] [--warmup N] [--label NAME]\n"
+    "       [--no-pretouch]\n",
     program);
   std::exit(2);
 }
@@ -220,6 +230,7 @@ int main(int argc, char ** argv)
     else if (flag == "--frames") { opt.frames = std::atol(value().c_str()); }
     else if (flag == "--warmup") { opt.warmup = std::atol(value().c_str()); }
     else if (flag == "--mlock") { opt.mlock = true; }
+    else if (flag == "--no-pretouch") { opt.pretouch = false; }
     else { usage(argv[0], "unknown flag " + flag); }
   }
   if (opt.dataset.empty() || opt.out.empty()) {
@@ -274,8 +285,24 @@ int main(int argc, char ** argv)
     pipeline.run(depths[f].data(), rgbs[f].data(), width, height);
   }
 
+  // The record buffer is written by the loop, so its pages are first touched
+  // inside the measured window unless they are touched here. reserve() alone
+  // is not enough: it reserves address space, and the kernel still hands over
+  // each page on first write. Measured, that is a minor fault every 4 KB of
+  // records, 19 of them over 2000 cycles, charged to the pipeline by anyone
+  // reading the fault count. --no-pretouch runs the same loop without this and
+  // is the control that shows the difference; see docs/REALTIME.md.
+  //
+  // This is the instrument's own real-time discipline, and it is the same rule
+  // the pipeline is held to: a hot path touches no page it has not already
+  // touched.
   std::vector<Cycle> cycles;
-  cycles.reserve(static_cast<std::size_t>(opt.frames));
+  if (opt.pretouch) {
+    cycles.assign(static_cast<std::size_t>(opt.frames), Cycle{});
+    cycles.clear();
+  } else {
+    cycles.reserve(static_cast<std::size_t>(opt.frames));
+  }
 
   const Faults faults_before = read_faults();
   g_allocs.store(0);
@@ -308,6 +335,28 @@ int main(int argc, char ** argv)
     std::fprintf(stderr, "cannot write %s\n", opt.out.c_str());
     return 1;
   }
+  long overruns = 0;
+  for (const Cycle & c : cycles) { if (c.slack_ns < 0) { ++overruns; } }
+
+  // A run header before the cycles. The fault and allocation counts are
+  // properties of the whole window rather than of any one cycle, and a number
+  // quoted in a document has to be readable back out of a committed file: left
+  // on stderr they would be a claim about a run nobody else can inspect.
+  std::fprintf(
+    out,
+    "{\"record\":\"run\",\"impl\":\"cpp\",\"label\":\"%s\",\"policy\":\"%s\","
+    "\"policy_notes\":\"%s\",\"rate_hz\":%.17g,\"frames\":%ld,\"warmup\":%ld,"
+    "\"dataset\":\"%s\",\"width\":%d,\"height\":%d,\"cpu\":%d,\"priority\":%d,"
+    "\"pretouch\":%s,"
+    "\"allocations\":%ld,\"allocated_bytes\":%ld,\"minor_faults\":%ld,"
+    "\"major_faults\":%ld,\"overruns\":%ld}\n",
+    opt.label.c_str(), opt.policy.c_str(), policy_notes.c_str(), opt.rate_hz,
+    opt.frames, opt.warmup, opt.dataset.c_str(), width, height, opt.cpu,
+    opt.priority, opt.pretouch ? "true" : "false",
+    g_allocs.load(), g_alloc_bytes.load(),
+    faults_after.minor - faults_before.minor,
+    faults_after.major - faults_before.major, overruns);
+
   for (const Cycle & c : cycles) {
     std::fprintf(
       out,
@@ -319,17 +368,15 @@ int main(int argc, char ** argv)
   }
   std::fclose(out);
 
-  long overruns = 0;
-  for (const Cycle & c : cycles) { if (c.slack_ns < 0) { ++overruns; } }
-
   std::fprintf(
     stderr,
-    "%s: %ld cycles at %.1f Hz, policy=%s [%s]\n"
+    "%s: %ld cycles at %.1f Hz, policy=%s [%s%s]\n"
     "  allocations in the measured window: %ld (%ld bytes)\n"
     "  minor faults: %ld, major faults: %ld\n"
     "  overruns: %ld (%.2f%%)\n",
     opt.label.c_str(), opt.frames, opt.rate_hz, opt.policy.c_str(),
-    policy_notes.c_str(), g_allocs.load(), g_alloc_bytes.load(),
+    policy_notes.c_str(), opt.pretouch ? "pretouched;" : "not-pretouched;",
+    g_allocs.load(), g_alloc_bytes.load(),
     faults_after.minor - faults_before.minor,
     faults_after.major - faults_before.major,
     overruns, 100.0 * static_cast<double>(overruns) / static_cast<double>(opt.frames));
