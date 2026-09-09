@@ -74,10 +74,12 @@ class Group:
         self.converged = None
         self.ik_iterations = None
         self.points = None
+        self.cluster_points = None
         self.timer_overhead_ns = None
         self.width = None
         self.height = None
         self.sources: list[str] = []
+        self.frame_labels: dict = {}
 
     @property
     def key(self) -> tuple:
@@ -161,6 +163,8 @@ def load(paths: list[Path], data_root: Path) -> list[Group]:
         group.ik_iterations = np.array([r['ik_iterations'] for r in records],
                                        dtype=np.int64)
         group.points = np.array([r['points'] for r in records], dtype=np.int64)
+        group.cluster_points = np.array([r['cluster_points'] for r in records],
+                                        dtype=np.int64)
         group.timer_overhead_ns = records[0].get('timer_overhead_ns')
         if 'gc' in records[0]:
             group.gc = np.array([[r['gc']['gen0'], r['gc']['gen1'],
@@ -168,7 +172,96 @@ def load(paths: list[Path], data_root: Path) -> list[Group]:
                                 dtype=np.int64)
         group.width, group.height = resolution_for(group.dataset, data_root)
         groups.append(group)
+    check_frame_labels(groups)
     return groups
+
+
+# ------------------------------------------------- frame labels on ROS rows
+
+# A group's frame labels are trusted for blocking only if at least this share
+# of its records carry a label the corpus agrees with.
+FRAME_LABEL_AGREEMENT = 0.99
+
+
+def check_frame_labels(groups: list) -> None:
+    """Verify, and where possible repair, the frame index on non-inproc rows.
+
+    An in-process runner knows which stored frame it just fed the pipeline. A
+    ROS node does not: ROS 2 removed Header.seq, so `GraspLatency.seq` counts
+    the frames the node *processed*, and `latency_bag_to_jsonl.py` turns that
+    into a frame index with `seq % frame_count`. That is only the published
+    frame index while nothing is dropped. On an arm that drops four frames in
+    five the two have nothing to do with each other, and measured on the
+    committed runs the label is right for 100.0% of the lossless composed C++
+    records and 0.3% of the lossy own-process C++ ones.
+
+    The records carry their own identity anyway. `points` is the count entering
+    S3 and `cluster_points` the size of the cluster S4 chose; the pipeline is
+    deterministic, so the pair is a fingerprint of the stored frame, and the
+    in-process rows for the same corpus supply the mapping. On the 640x480
+    corpus `points` alone collides on one pair of frames and the two together
+    separate all 100. Where a fingerprint belongs to exactly one frame the
+    label is repaired from it; where it does not, it is left alone and counted.
+
+    A group whose labels cannot be brought up to FRAME_LABEL_AGREEMENT keeps
+    them for reporting but is refused the frame-blocked bootstrap: an interval
+    blocked on a label that does not identify a frame is not the interval it
+    claims to be.
+    """
+    truth = {}
+    for g in groups:
+        if g.transport != 'inproc':
+            continue
+        by_frame = truth.setdefault(g.dataset, {})
+        for frame, points, cluster in zip(g.frame.tolist(), g.points.tolist(),
+                                          g.cluster_points.tolist()):
+            by_frame.setdefault(frame, (points, cluster))
+
+    for group in groups:
+        if group.transport == 'inproc':
+            group.frame_labels = {'source': 'the runner knows the frame',
+                                  'agreement': 1.0, 'blockable': True}
+            continue
+
+        by_frame = truth.get(group.dataset)
+        if not by_frame:
+            group.frame_labels = {
+                'source': 'seq modulo the frame count',
+                'agreement': None, 'blockable': False,
+                'note': 'no in-process run of this corpus was supplied, so the '
+                        'labels could not be checked against it'}
+            continue
+
+        actual = list(zip(group.points.tolist(), group.cluster_points.tolist()))
+        agreement = float(np.mean([by_frame.get(f) == a for f, a
+                                   in zip(group.frame.tolist(), actual)]))
+        entry = {'source': 'seq modulo the frame count',
+                 'agreement': agreement, 'blockable': agreement >= FRAME_LABEL_AGREEMENT}
+
+        if not entry['blockable']:
+            # Fingerprint back to a frame, but only where it is unambiguous.
+            seen = {}
+            for frame, key in by_frame.items():
+                seen.setdefault(key, []).append(frame)
+            unique = {k: f[0] for k, f in seen.items() if len(f) == 1}
+            repaired = np.array([unique.get(a, -1) for a in actual])
+            resolved = int((repaired >= 0).sum())
+            count = int(group.frame.size)
+            entry['repaired_from_fingerprint'] = resolved
+            entry['ambiguous'] = count - resolved
+            if resolved == count:
+                group.frame = repaired
+                # `agreement` stays the observed number. Overwriting it with
+                # the post-repair 1.0 would hide the defect this exists to
+                # report.
+                entry.update(source='point and cluster fingerprint',
+                             agreement_after_repair=1.0, blockable=True)
+            else:
+                entry['note'] = (
+                    f'{count - resolved} of {count} records carry a '
+                    f'fingerprint shared by more than one frame, so the labels '
+                    f'could not be fully repaired')
+        group.frame_labels = entry
 
 
 # ------------------------------------------------------------- statistics
@@ -473,6 +566,7 @@ def build(groups: list[Group], config: dict, args) -> dict:
                 'max': int(group.ik_iterations.max()),
             },
             'points_median': float(np.median(group.points)),
+            'frame_labels': group.frame_labels,
         }
         entry['p99_ci_iid'] = bootstrap_ci(
             group.total, 99.0, analysis['bootstrap_resamples'],
@@ -481,7 +575,7 @@ def build(groups: list[Group], config: dict, args) -> dict:
         entry['p99_ci_by_frame'] = bootstrap_ci(
             group.total, 99.0, analysis['bootstrap_resamples'],
             analysis['bootstrap_confidence'], analysis['bootstrap_seed'],
-            method, blocks=group.frame)
+            method, blocks=group.frame) if group.frame_labels['blockable'] else None
         summary['groups'].append(entry)
 
         if group.gc is not None:
@@ -612,6 +706,48 @@ def headline(summary: dict, reference: str) -> list[str]:
     return lines
 
 
+def frame_label_note(summary: dict) -> list[str]:
+    """Say which rows had a usable frame label, and what happened to the rest.
+
+    The frame-blocked interval is the honest one, so a row that cannot have it
+    has to say why rather than quietly falling back to the narrower iid one.
+    """
+    lines = []
+    for entry in summary['groups']:
+        info = entry['frame_labels']
+        if info.get('source') == 'the runner knows the frame':
+            continue
+        label = f"{entry['impl']} [{entry['transport']}]"
+        agreement = info.get('agreement')
+        share = 'could not be checked against the corpus' if agreement is None \
+            else f"agreed with the corpus on {100 * agreement:.1f}% of records"
+        if info.get('source') == 'point and cluster fingerprint':
+            lines.append(
+                f"* `{label}`: the node's frame index {share}, and was rebuilt "
+                f"from each record's point and cluster counts, which identify "
+                f"the stored frame exactly. The interval above is blocked on "
+                f"the rebuilt labels.")
+        elif info['blockable']:
+            lines.append(f"* `{label}`: the node's frame index {share}, so it "
+                         f"is used as it stands.")
+        else:
+            note = info.get('note')
+            lines.append(
+                f"* `{label}`: the node's frame index {share}"
+                + (f", and {note}" if note else '')
+                + '. No frame-blocked interval is reported for this row; the '
+                  'JSON carries the iid one, which is narrower than the truth.')
+    if not lines:
+        return []
+    return ['**Frame labels outside the in-process runs.** ROS 2 has no '
+            'per-message sequence number, so a node counts the frames it '
+            'processed, and that is the published frame index only while '
+            'nothing is dropped. Each row below was checked against the '
+            'corpus rather than assumed, since a frame-blocked interval is '
+            'meaningless on a label that does not identify a frame.', ''] \
+        + lines + ['']
+
+
 def markdown(summary: dict, rate_sweep: dict | None,
              reference: str) -> list[str]:
     meta = summary['metadata']
@@ -666,7 +802,7 @@ def markdown(summary: dict, rate_sweep: dict | None,
             str(entry['samples']),
             ms(total['p50']), ms(total['p90']), ms(total['p95']),
             ms(total['p99']),
-            f"{ms(ci['low'])} to {ms(ci['high'])}",
+            f"{ms(ci['low'])} to {ms(ci['high'])}" if ci else 'not reported',
             ms(total['p99.9']), ms(total['max']), ms(total['mean']),
             f"{total['mean'] / total['p50']:.2f}",
         ])
@@ -674,6 +810,7 @@ def markdown(summary: dict, rate_sweep: dict | None,
         ['impl', 'corpus', 'res', 'n', 'p50', 'p90', 'p95', 'p99',
          'p99 95% CI', 'p99.9', 'max', 'mean', 'mean/p50'],
         rows, align='llrrrrrrrrrrr')
+    lines += [''] + frame_label_note(summary)
 
     lines += ['', '### What each run was doing', '']
     rows = []
@@ -1061,10 +1198,14 @@ def csv_rows(summary: dict):
                     continue
                 yield {**base, 'scope': f'stage:{stage}',
                        'metric': f'{metric}_ns', 'value': value}
+        # A row whose frame labels do not identify a frame has no
+        # frame-blocked interval, and the cell is left empty rather than
+        # filled from the narrower iid one.
+        ci = entry['p99_ci_by_frame']
         yield {**base, 'scope': 'total', 'metric': 'p99_ci_low_ns',
-               'value': entry['p99_ci_by_frame']['low']}
+               'value': ci['low'] if ci else ''}
         yield {**base, 'scope': 'total', 'metric': 'p99_ci_high_ns',
-               'value': entry['p99_ci_by_frame']['high']}
+               'value': ci['high'] if ci else ''}
         yield {**base, 'scope': 'run', 'metric': 'over_budget_fraction',
                'value': entry['over_budget_fraction']}
         yield {**base, 'scope': 'run', 'metric': 'distinct_frames',

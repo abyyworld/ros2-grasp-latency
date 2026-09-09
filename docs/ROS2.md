@@ -389,9 +389,31 @@ Stated rather than hidden, because they bound what the numbers mean.
   `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST` so no traffic leaves the host.
   Cyclone DDS will give different transport numbers; set `RMW_IMPLEMENTATION`
   and rerun if that is the question you have.
-* **Sequence numbers, not header sequence.** ROS 2 removed `Header.seq`, so
-  `GraspLatency.seq` is the node's own counter. A gap in it means the transport
-  or the recorder lost a sample, and the converter says so.
+* **Sequence numbers, not header sequence, and the frame index they used to
+  imply.** ROS 2 removed `Header.seq`, so `GraspLatency.seq` is the node's own
+  counter of frames it processed. A gap in it means the transport or the
+  recorder lost a sample, and the converter says so. It does not mean anything
+  about frames the node never received: those produce no message and therefore
+  no gap, so this counter cannot see the loss the comparison is about.
+
+  That had a consequence worth stating plainly, because the repository shipped
+  it. `latency_bag_to_jsonl.py` writes a frame index as `seq % frame_count`,
+  which is the published frame only while nothing is dropped. Checked against
+  the corpus, the label is right for 100.0% of the lossless composed C++
+  records, 0.3% of the own-process C++ ones and 1.0% of the rclpy ones. So the
+  frame-blocked bootstrap, which exists precisely because repeats of one frame
+  are not independent samples, was blocking the two lossy ROS rows on a label
+  that did not identify a frame.
+
+  `harness/analyze.py` now checks every non-inproc row against the corpus
+  instead of trusting the label, and rebuilds it from the record's own point
+  and cluster counts, which are a deterministic fingerprint of the stored frame
+  and separate all 100 of them. A row it cannot repair is refused a
+  frame-blocked interval rather than given a wrong one. What the repair changed
+  in the published figures is small and is reported anyway: the rclpy row's
+  distinct-frame count falls from 100, which was an artifact of the label
+  cycling, to the 99 frames it really saw, and the p99 interval moves by
+  0.1 ms on the C++ row and not at all on the rclpy one.
 * **The recorder is never composed.** `/grasp/latency` leaves the node through
   the RMW in all four arms, because `ros2 bag record` is its own process. So
   the intra-process arm is intra-process on the depth topic only. That is the

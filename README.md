@@ -40,6 +40,15 @@ Python costs **5.67x at p50**. The equivalence gate passes on this run at
 written that way runs at about 6 Hz and discards the rest. The composed C++
 node drops nothing, in every run.
 
+Every one of those percentages is recomputed from a committed file, and the
+recipe is short enough to state: the driver publishes 2100 frames per arm, the
+converter discards the first 100 as warm-up, so the drop rate for
+`results/ros2_*.repN.timing.jsonl` is `1 - (lines + 100) / 2100`. The
+`.rep1`, `.rep2` and `.rep3` files are the three repeats in the table. The
+fourth file per arm, without a `.rep` suffix, is an earlier standalone run and
+is the one `results/RESULTS.md` reports, which is why its ROS rows carry a
+single number where this table carries three.
+
 ### The BLAS is the whole story, and it was measured
 
 An earlier revision of this README reported the two implementations at parity

@@ -28,8 +28,16 @@ uint8 STAGE_TRAJ=7
 
 builtin_interfaces/Time stamp
 
-# Frames this node has processed, from zero. ROS 2 dropped Header.seq, and the
-# analysis needs a gap-detectable counter to tell a slow node from a lossy one.
+# Frames this node has processed, from zero. ROS 2 dropped Header.seq, so there
+# is no per-message number coming in and this is the node's own count going out.
+#
+# Read what that does and does not detect. A gap here means a latency message
+# was lost between this node and the recorder. A frame the node never received,
+# because the queue overflowed under best-effort QoS, produces no message and
+# therefore no gap: this counter cannot see it. Loss of that kind is measured
+# by counting records against the frames the driver published, and the frame a
+# record belongs to is recovered from its own point and cluster counts. See
+# docs/ROS2.md.
 uint32 seq
 
 uint64 end_to_end_ns

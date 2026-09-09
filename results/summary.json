@@ -1,7 +1,7 @@
 {
   "metadata": {
-    "generated_at_utc": "2026-09-06T23:00:07Z",
-    "git_revision": "27a1846ea536fc508b99d10bd6ac5ef71a8a6e19",
+    "generated_at_utc": "2026-09-09T09:23:06Z",
+    "git_revision": "c13f8dffaad6a5bd2d4778d676218399cdd75fc2",
     "toolchain_declared": {
       "OS": "Ubuntu 24.04.4 LTS",
       "Kernel": "Linux 6.18.44",
@@ -21,9 +21,9 @@
       "numpy": "2.4.6",
       "cpu_count": 4,
       "load_average": [
-        0.00830078125,
-        0.01513671875,
-        0.0
+        0.56787109375,
+        0.2783203125,
+        0.142578125
       ],
       "blas_threads": {
         "OPENBLAS_NUM_THREADS": null,
@@ -177,6 +177,11 @@
         "max": 41
       },
       "points_median": 478169.5,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 145396081.0,
         "high": 147663838.0,
@@ -305,6 +310,11 @@
         "max": 36
       },
       "points_median": 53129.0,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 10195937.0,
         "high": 10430770.0,
@@ -433,6 +443,11 @@
         "max": 36
       },
       "points_median": 212574.5,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 62100333.0,
         "high": 64050459.0,
@@ -561,6 +576,14 @@
         "max": 36
       },
       "points_median": 212529.0,
+      "frame_labels": {
+        "source": "point and cluster fingerprint",
+        "agreement": 0.0033917467495760316,
+        "blockable": true,
+        "repaired_from_fingerprint": 1769,
+        "ambiguous": 0,
+        "agreement_after_repair": 1.0
+      },
       "p99_ci_iid": {
         "low": 28255533.0,
         "high": 29426477.0,
@@ -569,11 +592,11 @@
         "standard_error": 386642.72042757075
       },
       "p99_ci_by_frame": {
-        "low": 28215423.0,
-        "high": 29426477.0,
+        "low": 28255533.0,
+        "high": 29430629.0,
         "confidence": 0.95,
         "resamples": 2000,
-        "standard_error": 400069.1709281631
+        "standard_error": 388499.87749627925
       }
     },
     {
@@ -689,6 +712,11 @@
         "max": 36
       },
       "points_median": 212574.5,
+      "frame_labels": {
+        "source": "seq modulo the frame count",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 31858654.0,
         "high": 36059785.0,
@@ -817,6 +845,11 @@
         "max": 36
       },
       "points_median": 212574.5,
+      "frame_labels": {
+        "source": "seq modulo the frame count",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 32707202.0,
         "high": 36550715.0,
@@ -945,6 +978,11 @@
         "max": 32
       },
       "points_median": 212575.5,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 62772592.0,
         "high": 63447409.0,
@@ -1073,6 +1111,11 @@
         "max": 41
       },
       "points_median": 478169.5,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 338534116.0,
         "high": 385601852.0,
@@ -1201,6 +1244,11 @@
         "max": 36
       },
       "points_median": 53129.0,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 15777461.0,
         "high": 16282026.099999987,
@@ -1329,6 +1377,11 @@
         "max": 36
       },
       "points_median": 212574.5,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 59411681.8,
         "high": 61745309.0,
@@ -1352,7 +1405,7 @@
       "height": 480,
       "pixels": 307200,
       "samples": 305,
-      "distinct_frames": 100,
+      "distinct_frames": 99,
       "timer_overhead_ns": null,
       "total_ns": {
         "p50": 163329618.0,
@@ -1457,6 +1510,14 @@
         "max": 36
       },
       "points_median": 212529.0,
+      "frame_labels": {
+        "source": "point and cluster fingerprint",
+        "agreement": 0.009836065573770493,
+        "blockable": true,
+        "repaired_from_fingerprint": 305,
+        "ambiguous": 0,
+        "agreement_after_repair": 1.0
+      },
       "p99_ci_iid": {
         "low": 211608156.0,
         "high": 235244694.0,
@@ -1469,7 +1530,7 @@
         "high": 235244694.0,
         "confidence": 0.95,
         "resamples": 2000,
-        "standard_error": 7724336.912100513
+        "standard_error": 8075507.897686679
       }
     },
     {
@@ -1585,6 +1646,11 @@
         "max": 32
       },
       "points_median": 212575.5,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 62460594.0,
         "high": 65456053.0,
@@ -1713,6 +1779,11 @@
         "max": 36
       },
       "points_median": 212574.5,
+      "frame_labels": {
+        "source": "the runner knows the frame",
+        "agreement": 1.0,
+        "blockable": true
+      },
       "p99_ci_iid": {
         "low": 55924304.0,
         "high": 57399220.0,

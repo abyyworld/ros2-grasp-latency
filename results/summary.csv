@@ -282,8 +282,8 @@ cpp,table_640x480,ros2,640,480,307200,stage:traj,p99_ns,2516.0
 cpp,table_640x480,ros2,640,480,307200,stage:traj,p99.9_ns,7915.0
 cpp,table_640x480,ros2,640,480,307200,stage:traj,max_ns,30060.0
 cpp,table_640x480,ros2,640,480,307200,stage:traj,mean_ns,815.6026003391747
-cpp,table_640x480,ros2,640,480,307200,total,p99_ci_low_ns,28215423.0
-cpp,table_640x480,ros2,640,480,307200,total,p99_ci_high_ns,29426477.0
+cpp,table_640x480,ros2,640,480,307200,total,p99_ci_low_ns,28255533.0
+cpp,table_640x480,ros2,640,480,307200,total,p99_ci_high_ns,29430629.0
 cpp,table_640x480,ros2,640,480,307200,run,over_budget_fraction,0.0022611644997173543
 cpp,table_640x480,ros2,640,480,307200,run,distinct_frames,100
 cpp,table_640x480,ros2,640,480,307200,run,timer_overhead_ns,
@@ -796,7 +796,7 @@ py,table_640x480,ros2,640,480,307200,stage:traj,mean_ns,48956.983606557376
 py,table_640x480,ros2,640,480,307200,total,p99_ci_low_ns,211608156.0
 py,table_640x480,ros2,640,480,307200,total,p99_ci_high_ns,235244694.0
 py,table_640x480,ros2,640,480,307200,run,over_budget_fraction,1.0
-py,table_640x480,ros2,640,480,307200,run,distinct_frames,100
+py,table_640x480,ros2,640,480,307200,run,distinct_frames,99
 py,table_640x480,ros2,640,480,307200,run,timer_overhead_ns,
 py,table_640x480,ros2,640,480,307200,run,ik_iterations_median,9.0
 py,table_640x480,ros2,640,480,307200,run,bail_plane_not_found,0

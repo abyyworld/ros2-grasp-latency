@@ -63,8 +63,13 @@ echo "=== 4/4  ROS 2 arms, ${REPEATS} repeats, so the drop rate has a spread ===
 for rep in $(seq 1 "${REPEATS}"); do
   echo "--- repeat ${rep} of ${REPEATS} ---"
   docker/run_ros_benchmark.sh --mode all --driver live
+  # Only the file this repeat just wrote. The glob used to match the previous
+  # repeats' renamed files too, so repeat 1's output came out of a three-repeat
+  # sweep named ros2_py.rep1.rep2.rep3.timing.jsonl, and which run a file came
+  # from was anyone's guess.
   for f in "${OUT}"/ros2*.timing.jsonl; do
     [ -e "${f}" ] || continue
+    case "${f}" in *.rep[0-9]*.timing.jsonl) continue ;; esac
     mv "${f}" "${f%.timing.jsonl}.rep${rep}.timing.jsonl"
   done
 done
