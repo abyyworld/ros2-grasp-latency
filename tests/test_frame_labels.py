@@ -105,7 +105,12 @@ def test_the_committed_ros_runs_reproduce_the_documented_agreements():
                      [r["cluster_points"] for r in rows],
                      rows[0]["dataset"])
 
-    truth_run = load("results/cpp.table_640x480.timing.jsonl")
+    # inproc_cpp.timing.jsonl, not cpp.table_640x480.timing.jsonl: the
+    # per-corpus timing files are regenerated rather than committed
+    # (.gitignore), and a test that needs a file only the author's machine has
+    # is a test that passes for the wrong reason. This one is committed, is the
+    # same corpus, and came off the same run as the ROS files below.
+    truth_run = load("results/inproc_cpp.timing.jsonl")
     truth_run.transport = "inproc"
     quoted = {"results/ros2_composed_cpp.timing.jsonl": 1.0,
               "results/ros2_cpp.timing.jsonl": 0.003,
