@@ -228,9 +228,9 @@ The three per-cycle findings underneath that:
   case runnable rather than describing it.
 * **The worst cycle is not the algorithm.** Grouping cycles by which stored
   frame they processed, frame content accounts for a band of 1.37 to 1.76 ms.
-  The worst cycle in each run sits 5.38 to 17.21 ms above its own frame's
-  median, and every one of the ten slowest cycles in every run allocated zero
-  times. Most of the worst-case excess is the machine, which is the argument
+  The worst cycle sits 5.38 to 17.21 ms above its own frame's median across the
+  twelve paired runs, which is 86 to 98 percent of the excess, and every one of
+  the ten slowest cycles in all fourteen runs allocated zero times. Most of the worst-case excess is the machine, which is the argument
   for isolation and a preemptible kernel, stated as a measurement.
 
 The honest limit on all of this: the kernel here is stock, so PREEMPT_RT is

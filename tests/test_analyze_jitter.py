@@ -142,3 +142,6 @@ def test_worst_case_is_split_between_the_frame_and_the_machine():
     # 20 of the 30 ms is not something the workload can account for.
     assert a["worst_cycle_excess_over_its_frame_median_ms"] == pytest.approx(20.0)
     assert a["allocations_in_ten_slowest_cycles"] == 0
+    # 20 of the 30 ms sits above frame 0's own median, and the cheapest frame
+    # median is 10, so all 20 ms of the excess is unaccounted for by content.
+    assert a["environmental_share_of_worst_excess"] == pytest.approx(1.0)

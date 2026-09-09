@@ -103,13 +103,16 @@ a run that was already fault-free, which is what a fault-free run predicts.
 
 ## Worst-case execution time, and what causes it
 
-Compute time, medians across six repeats per policy:
+Compute time over six repeats per policy. The percentiles are medians across
+those repeats; the last row is not, because the median of six maxima is not a
+worst case. It is the worst single cycle any of the six runs saw.
 
 | | `SCHED_OTHER` | `SCHED_FIFO` |
 |---|---:|---:|
-| p50 | 9.90 ms | 9.85 ms |
-| p99 | 12.50 ms | 12.55 ms |
-| worst single cycle | 18.98 ms | 27.69 ms |
+| p50, median of runs | 9.90 ms | 9.85 ms |
+| p99, median of runs | 12.50 ms | 12.55 ms |
+| worst cycle, worst of the six runs | 18.98 ms | 27.69 ms |
+| worst cycle, median of the six runs | 18.20 ms | 18.31 ms |
 
 A maximum on its own is not a result, so the excess is attributed rather than
 quoted. The loop cycles over 100 stored frames many times each, so the spread
@@ -121,8 +124,10 @@ frame's median**, and in all fourteen runs every one of the ten slowest cycles
 allocated zero times.
 
 So the algorithm's own worst case is bounded tightly and the tail is not the
-algorithm. Roughly four fifths to nine tenths of the worst-case excess is
-environmental: preemption, cache eviction, and whatever else shares the vCPU.
+algorithm. Taking each run's worst cycle against the cheapest frame's median,
+the share of that excess which frame content cannot account for is **86 to 98
+percent** across the twelve paired runs. The rest is environmental: preemption,
+cache eviction, and whatever else shares the vCPU.
 That is the argument for CPU isolation and a preemptible kernel, and it is a
 measurement here rather than a belief.
 

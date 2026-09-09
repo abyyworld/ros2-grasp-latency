@@ -112,6 +112,12 @@ def attribute_worst_case(rows):
         "worst_cycle_frame": worst["frame"],
         "worst_cycle_excess_over_its_frame_median_ms":
             worst_ms - frame_medians[worst["frame"]],
+        # Of the gap between the worst cycle and the cheapest frame's median,
+        # the share that no difference in frame content can account for. A
+        # number near 1 says the tail is the machine.
+        "environmental_share_of_worst_excess":
+            (worst_ms - frame_medians[worst["frame"]])
+            / (worst_ms - min(frame_medians.values())),
         "allocations_in_ten_slowest_cycles": sum(r.get("allocs", 0) for r in slowest),
     }
 
