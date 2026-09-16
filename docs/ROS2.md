@@ -428,21 +428,29 @@ Stated rather than hidden, because they bound what the numbers mean.
   `ros2` therefore carries both effects, which is why `ros2_composed_ipc`
   against `ros2_composed` is the cleaner of the two comparisons.
 
-## What is not verified
+## What has since been run
 
-Honest inventory. None of the following was compiled, launched or executed,
-because `packages.ros.org` is unreachable from the container this repository
-was written in and ROS 2 therefore cannot be installed here.
+This inventory used to say that none of the following had been compiled,
+launched or executed, because `packages.ros.org` was unreachable from the
+container this repository was first written in. That is no longer true, and
+the sections below are the corrected record.
 
-* No package in `ros2_ws/` has been built. `colcon build` has never run, so
-  nothing here is known to compile.
-* Neither node has been launched. No lifecycle transition has actually fired,
-  no topic connection or QoS match has been observed, and no parameter file has
-  been loaded by a real node.
-* No component has been loaded into a container, and **no intra-process
-  delivery has ever happened**. The claim that publishing a `unique_ptr` to a
-  single subscriber avoids the copy is read off the rclcpp sources, not
-  measured. Until a run exists, this repository quotes no number for it.
+* The workspace builds and both nodes launch. Sixteen timing files are
+  committed under `results/ros2_*.timing.jsonl`: four arms, three repeats each
+  plus an earlier standalone run.
+* Components load into a container and **intra-process delivery has been
+  measured**. It bought nothing: the composed node measures the same with it
+  as without, inside the run-to-run spread, which is the negative result in
+  the README. The claim that publishing a `unique_ptr` to a single subscriber
+  avoids the copy is still read off the rclcpp sources rather than measured
+  directly; what is measured is that removing the copy did not move the frame.
+* The four arms are summarised in `results/RESULTS.md` as the `[ros2]`,
+  `[ros2_composed]` and `[ros2_composed_ipc]` rows.
+
+### Still not verified
+
+* The launch files have not been evaluated by `ros2 launch` in CI, only by
+  hand during the runs above.
 * Intra-process delivery and lifecycle nodes are known to interact badly in
   places. rclcpp issue 2721 reports failures shutting a lifecycle node down
   cleanly with intra-process comms enabled, both composed and separate; issue
@@ -450,12 +458,13 @@ was written in and ROS 2 therefore cannot be installed here.
   which is why `FramePublisher` publishes a `unique_ptr`. Neither has been
   reproduced or ruled out here, and if `--mode composed_ipc` turns out to hang
   on teardown, that is where to look first.
-* The launch files have never been evaluated by `ros2 launch`. In particular
-  `autostart=` on `launch_ros.actions.LifecycleNode` and
+* `autostart=` on `launch_ros.actions.LifecycleNode` and
   `ParameterValue(..., value_type=bool)` for `use_intra_process_comms` were
-  checked against the Jazzy sources and not against a running launch service.
-* The Docker image has never been built.
-* `run_ros_benchmark.sh` has never been run against a real ROS installation.
+  checked against the Jazzy sources. The launch files ran during the benchmark,
+  so they are known to work; they are not exercised in CI.
+* The Docker image and `run_ros_benchmark.sh` produced the committed
+  `results/ros2_*.timing.jsonl` files. They are not rebuilt or rerun in CI, so
+  a change to either can rot without the test suite noticing.
 
 What *was* verified, here, by running it:
 

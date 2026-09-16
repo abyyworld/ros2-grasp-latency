@@ -24,17 +24,20 @@ are comparable to each other. `table_640x480`, 2000 measured frames.
 | Python, NumPy | 201.8 ms | 276.8 ms |
 
 Python costs **5.67x at p50**. The equivalence gate passes on this run at
-2.3e-14 with zero mismatches, so the two are computing the same answer.
+2.45e-13 with zero mismatches, so the two are computing the same answer.
+That is the worst deviation over every compared field; the tightest field is
+1.7e-16 and quoting that one instead would flatter the gate by three orders of
+magnitude.
 
 **Behind a real ROS 2 node at 30 Hz over Fast DDS**, three repeats each,
 2100 frames published per arm:
 
 | node | frames dropped (3 runs) | end to end p50 |
 | :--- | ---: | ---: |
-| rclcpp, composed | **0.0%, 0.0%, 0.0%** | 26 ms |
-| rclcpp, composed, intra-process | **0.0%, 0.0%, 0.0%** | 26 ms |
-| rclcpp, own process | 6.3%, 15.9%, 33.1% | 26 ms |
-| **rclpy, own process** | **77.8%, 78.2%, 85.8%** | **334 ms** |
+| rclcpp, composed | **0.0%, 0.0%, 0.0%** | 27 ms |
+| rclcpp, composed, intra-process | **0.0%, 0.0%, 0.0%** | 28 ms |
+| rclcpp, own process | 6.3%, 15.9%, 33.1% | 25 ms |
+| **rclpy, own process** | **77.8%, 78.2%, 85.8%** | **281 ms** |
 
 **The Python node drops four frames in five, reproducibly.** A 30 Hz loop
 written that way runs at about 6 Hz and discards the rest. The composed C++
@@ -67,8 +70,11 @@ one number. With OpenBLAS, Python wins the stage outright and the whole
 pipeline lands near parity. With the reference BLAS that ships in a standard
 ROS 2 container, it loses the stage 5.2x and the pipeline with it.
 
-Every stage that is *not* a large matrix product is 10x to 237x slower in
-Python, consistently, on both hosts:
+Every stage that is *not* a large matrix product is 10.3x to 237x slower in
+Python on this host:
+
+From `results/inproc_*.timing.jsonl`, the arm64 container run with the
+reference BLAS:
 
 | stage | cpp p50 | py p50 | ratio |
 | :--- | ---: | ---: | ---: |
@@ -100,25 +106,28 @@ which drop nothing in every run, are the trustworthy C++ figure.
 ### Why one stage decides the whole pipeline
 
 Per stage at 640x480, p50, in microseconds, ordered by what the stage costs
-C++:
+C++. This is the **other** host, the x86 machine with OpenBLAS, read from
+`results/summary.json`; the table above is the arm64 container. The plane row
+is where they part company, and it is the whole argument of this section:
 
 | stage | cpp p50 | py p50 | ratio | share of the cpp frame |
 | :--- | ---: | ---: | ---: | ---: |
-| plane (RANSAC) | 55,485.62 | 62,280.07 | 1.1x | 95.6% |
-| transform and crop | 1,435.90 | 11,007.78 | 7.7x | 2.5% |
-| deproject | 915.85 | 10,801.85 | 11.8x | 1.6% |
-| cluster | 88.18 | 595.11 | 6.7x | 0.2% |
-| IK | 26.25 | 1,260.28 | 48.0x | 0.0% |
-| grasp | 13.82 | 461.39 | 33.4x | 0.0% |
-| trajectory | 1.44 | 56.85 | 39.4x | 0.0% |
-| decode | 0.03 | 10.55 | 422.0x | 0.0% |
+| plane (RANSAC) | 46,426.33 | 34,172.10 | **0.74x** | 97.2% |
+| transform and crop | 784.83 | 6,101.27 | 7.8x | 1.6% |
+| deproject | 483.00 | 5,736.94 | 11.9x | 1.0% |
+| cluster | 40.83 | 332.60 | 8.2x | 0.1% |
+| IK | 12.38 | 537.16 | 43.4x | 0.0% |
+| grasp | 8.11 | 226.36 | 27.9x | 0.0% |
+| trajectory | 1.47 | 23.92 | 16.2x | 0.0% |
+| decode | 0.03 | 5.02 | 185.9x | 0.0% |
 
-One stage is 95.6% of the C++ frame, and it is the one stage where Python is
-1.1x rather than tens of times slower. RANSAC plane scoring is a large array
+One stage is 97.2% of the C++ frame, and it is the one stage where Python does
+not merely keep up but **wins**, at 0.74x. RANSAC plane scoring is a large array
 reduction: Python issues it as a handful of NumPy calls per block of points and
-then waits inside compiled loops. The stages where the interpreter is charged
-per call rather than per element are 48x, 39x and 33x slower, and they are 1.5%,
-0.1% and 0.5% of the Python frame. The whole-pipeline ratio is modest because
+then waits inside compiled loops, and on this host those loops are OpenBLAS.
+The stages where the interpreter is charged per call rather than per element are
+43x, 28x and 16x slower, and they are 1.1%, 0.5% and 0.1% of the Python frame.
+The whole-pipeline ratio is modest because
 of the mix, not because the interpreter is close to compiled code.
 
 So the headline is a property of this pipeline's shape, and the shape was swept
@@ -298,14 +307,20 @@ was built to test it.** Every Python timing record carries the CPython
 collection counters per generation, sampled through a `gc.callbacks` hook, so
 the frames a collection landed on are known rather than guessed. Over 2000
 measured frames at 640x480 there is **one** collection, in generation 0. It
-lands on one frame, 0.1% of the run. Removing that frame moves p99 by 0.0%,
-from 107.194 ms to 107.194 ms. Collections are no more common among tail frames
-(0.0%) than overall (0.1%), and the point-biserial correlation between "a
-collection fired" and frame latency is +0.044. The same holds on all four
-corpora. The Python tail is not the collector, which leaves allocator behaviour
+lands on one frame, 0.05% of the run. Removing that frame moves p99 by 0.0%,
+from 60.299 ms to 60.299 ms. Collections are no more common among tail frames
+(0.0%) than overall (0.05%). The point-biserial correlation between "a
+collection fired" and frame latency is not recoverable for this corpus from the
+committed summary, because `gc_attribution` was keyed by implementation and
+dataset without transport until this was fixed, so the 305-frame ROS 2 run
+overwrote the 2000-frame in-process one. Where it is recorded, across the other
+corpora, it runs from -0.022 to +0.033: no association in either direction.
+The same holds on all four corpora. The Python tail is not the collector, which leaves allocator behaviour
 and scheduler noise, and threat T2 measured how much of it is the box: on a
 machine shared with a neighbouring workload the same run reported p99 232.3 ms
-against 107.2 ms quiet, an inflation of 2.17x. That is why every published
+against 107.2 ms quiet, an inflation of 2.17x. That pair is from the 2026-09-06
+run preserved in `results/workload_sweep.json`, whose quiet baseline has since
+been superseded by the 60.299 ms above; the ratio has not been remeasured. That is why every published
 figure comes from the quiet run and why the medians are the numbers to lean on.
 
 **NumPy's BLAS was quietly using four cores against the C++ build's one.** The
@@ -330,7 +345,7 @@ table landed outside the workspace crop entirely and every stage after the crop
 saw an empty cloud. Corrected to a right-handed frame with `det(R) = +1`, the
 optical axis mapping to base `-z`, 0.85 m above and 0.30 m in front of the
 base. The same commit added `tests/test_config_is_sole_source.py`, which
-polices 39 distinctive constants and fails if either implementation types one
+polices 47 distinctive constants and fails if either implementation types one
 in rather than reading it from `assets/pipeline_config.json`.
 
 **A tuning constant chosen for one configuration became a tax on another, and
@@ -370,9 +385,10 @@ pins it at 512 through 131072 points, asserting bit-identical output rather
 than a tolerance, and was itself checked by restoring the bug and watching it
 fail.
 
-**The machine drifts 12 percent and two plausible explanations for it were
-both wrong.** The same binary on the same corpus measures 56.6 to 60.7 ms p50
-across runs. The first guess was that the slow runs were contaminated by
+**The machine drifts about 20 percent and two plausible explanations for it
+were both wrong.** The same binary on the same corpus measured p50 between 47.7
+and 58.1 ms across one session, which is the range `docs/METHOD.md` records and
+the one that contains the 47.731 ms published in `results/RESULTS.md`. The first guess was that the slow runs were contaminated by
 concurrent load; re-running on an idle machine produced a slightly *slower*
 number, so that was wrong. The second guess was that short runs were the honest
 ones, since a 250-frame run had read 53.0 ms; running 250, 500 and 2000 frames
@@ -404,8 +420,9 @@ libraries, not the languages.
 
 ## How to reproduce
 
-Nothing here needs ROS 2 except the ROS 2 numbers, and there are no ROS 2
-numbers. Everything in `results/` is the in-process pipeline.
+Everything except the ROS 2 rows reproduces without ROS 2. The ROS 2 numbers
+were measured later, in a container, and the sixteen
+`results/ros2_*.timing.jsonl` files they come from are committed.
 
 ### Without Docker: every number in this README
 
@@ -432,7 +449,8 @@ at the end on purpose: if the two implementations disagree, every latency number
 below that line is a comparison between two different programs, so the run
 stops.
 
-The suites are 6 of 6 C++ tests and 66 of 66 Python tests. The stages can also
+The suites are 6 of 6 C++ tests and 78 Python tests, of which 71 run and 7
+skip until the C++ bench binary is built and the corpora are generated. The stages can also
 be run individually:
 
 ```bash
@@ -489,8 +507,10 @@ docker run --rm -it \
 
 That produces four timing files in the same format the in-process runs use:
 the rclcpp node, the rclpy node, a composed C++ node over the RMW, and the same
-composed node with intra-process delivery. **None of those numbers exist in
-this repository, and none is quoted anywhere in it.** Anything involving DDS,
+composed node with intra-process delivery. **Those runs have since been done
+and committed**, three repeats per arm plus an earlier standalone run, and they
+are what the ROS 2 table at the top of this README and the `[ros2*]` rows in
+`results/RESULTS.md` report. Anything involving DDS,
 CDR serialisation, executor dispatch, rclpy message conversion or
 intra-process delivery needs a host with Docker. Everything above this section
 does not. [docs/ROS2.md](docs/ROS2.md) ends with the inventory of what has and
@@ -513,9 +533,11 @@ Not measured, each one written up at length in
 * **T2**, four shared vCPUs with no pinning or isolation. p99 and the maximum
   are upper bounds for this stack rather than clean measurements. Sized by
   running the whole benchmark under load and quiet.
-* **T3**, ROS 2 is absent, so the transport is not measured. The ratio here is
-  a lower bound on the language cost of a ROS 2 grasp node, since rclpy pays
-  conversion costs rclcpp does not.
+* **T3**, the in-process ratio excludes the transport. It is a lower bound on
+  the language cost of a ROS 2 grasp node, since rclpy pays conversion costs
+  rclcpp does not. The ROS 2 arms were measured separately and are reported
+  above; they are a different corpus and a different host from the in-process
+  figures, so the two are not subtractable.
 * **T4**, this measures Python plus NumPy against C++ plus Eigen, not
   interpreted against compiled. There is no numba, no Cython and no C extension
   of our own, because the question is what an ordinary rclpy node costs.

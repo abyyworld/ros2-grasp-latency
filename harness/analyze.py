@@ -579,7 +579,12 @@ def build(groups: list[Group], config: dict, args) -> dict:
         summary['groups'].append(entry)
 
         if group.gc is not None:
-            summary['gc_attribution'][f'{group.impl}/{group.dataset}'] = \
+            # Keyed by transport as well as impl and dataset. Without it the
+            # 305-frame ROS 2 py run silently overwrote the 2000-frame
+            # in-process run of the same impl and dataset, and the GC table
+            # then reported the wrong run's frame count, p99 and correlation.
+            summary['gc_attribution'][
+                f'{group.impl}/{group.dataset}/{group.transport}'] = \
                 gc_attribution(group, analysis['tail_percentile'], method)
 
     by_key = {(g['impl'], g['dataset'], g['transport']): g

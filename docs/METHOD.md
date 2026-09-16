@@ -524,12 +524,13 @@ language result. That is the whole of this threat, measured on this machine:
 **the median is a property of the pipeline and the tail is partly a property of
 the box.** Every figure in `RESULTS.md` comes from the quiet run.
 
-## T3. ROS 2 is absent from this machine, so the transport is not measured here
+## T3. The in-process corpus excludes the transport
 
-`packages.ros.org` returns 403 through this container's egress proxy, so ROS 2
-cannot be installed and has not been. Everything in `results/` is the
-**in-process** pipeline: no DDS, no CDR serialisation, no executor dispatch, no
-`rclpy` message conversion.
+The in-process pipeline carries no DDS, no CDR serialisation, no executor
+dispatch and no `rclpy` message conversion. Those were measured separately, in
+a container, and are committed as `results/ros2_*.timing.jsonl` and reported in
+the `[ros2*]` rows of `results/RESULTS.md`. They are a different host and a
+different corpus from the in-process figures, so the two do not subtract.
 
 Those are not incidental costs. They are most of what people mean when they say
 a ROS node is slow, and `rclpy` pays them very differently from `rclcpp`: the
